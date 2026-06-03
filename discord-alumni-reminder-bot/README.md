@@ -1,76 +1,125 @@
 # Discord Alumni Reminder Bot
 
-A simple Discord bot for alumni association meeting reminders.
+A simple Discord bot for alumni association meeting reminders and agenda collection.
 
-The bot lets admins add scheduled meetings and automatically pings the configured alumni role 7 days before and 1 hour before each meeting. Server members can add agenda items, and reminder messages include the current agenda when one exists.
+Native Discord Scheduled Events are the source of truth. Admins create and edit meetings using Discord's normal Event UI, and this bot reads those events, tracks reminder state locally in SQLite, and posts custom reminders to the configured announcement channel.
 
-## Features
+The bot does not create Discord Events, manage RSVPs, or sync with Google Calendar.
 
-- Guild-specific Discord slash commands
-- SQLite persistence in `alumni_bot.db`
-- Meeting reminders checked every 60 seconds
-- Restart-safe reminder tracking
-- Role pings with restricted allowed mentions
-- Agenda item collection
-- Local `.env` configuration
+## What It Does
 
-## Commands
+- Reads native Discord Scheduled Events from one configured server
+- Tracks events whose names contain `EVENT_NAME_FILTER`
+- Sends reminders to the configured alumni role 7 days before and 1 hour before each tracked event
+- Includes the Discord event link in reminder messages
+- Lets members add agenda items without copying IDs
+- Stores reminder flags and agenda items in `alumni_bot.db`
+- Uses guild-specific slash command sync so commands appear quickly
 
-Admin-only commands require the Discord **Manage Server** permission.
+## For Server Members
 
-| Command | Who can use it | Description |
-| --- | --- | --- |
-| `/meeting_add title start_time` | Admins | Adds a meeting. `start_time` uses `YYYY-MM-DD HH:MM` in the configured timezone. |
-| `/meeting_list` | Admins | Lists active upcoming meetings. |
-| `/meeting_remove meeting_id` | Admins | Soft-removes a meeting. |
-| `/agenda_add meeting_id item` | Any server member | Adds an agenda item to an active future meeting. |
-| `/agenda_list meeting_id` | Any server member | Lists agenda items for a meeting. |
-| `/agenda_remove agenda_item_id` | Admins | Soft-removes an agenda item. |
-
-Example:
+Normal members only need these commands:
 
 ```text
-/meeting_add title:"Alumni Association Monthly Meeting" start_time:"2026-07-01 19:00"
-/agenda_add meeting_id:1 item:"Discuss spring alumni event planning"
-/agenda_list meeting_id:1
+/next_meeting
+/agenda
+/agenda_add item:"Your topic here"
 ```
 
-## Create the Discord Bot
+Use `/next_meeting` to see the next alumni meeting.
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Select **New Application**.
-3. Give the application a name.
-4. Open **Bot** in the left sidebar.
-5. Select **Add Bot**.
-6. Copy the bot token and place it in your local `.env` file as `DISCORD_TOKEN`.
+Use `/agenda` to view the current agenda for the next meeting.
 
-Keep the token private. Do not commit your real `.env` file.
+Use `/agenda_add` to add an agenda item:
 
-## Required Bot Permissions
+```text
+/agenda_add item:"Discuss Derby Days fundraiser planning"
+```
 
-The bot only needs these permissions:
+The bot automatically attaches the agenda item to the next upcoming matching Discord event. Members do not need to know event IDs, server IDs, channel IDs, role IDs, or database IDs.
+
+## For Admins
+
+Admin commands require the Discord **Manage Server** permission.
+
+1. Create the recurring alumni meeting using Discord's normal Event UI.
+2. Make sure the event name contains the configured `EVENT_NAME_FILTER`.
+3. Run:
+
+```text
+/event_sync
+```
+
+4. Confirm the bot sees the event:
+
+```text
+/event_list
+```
+
+After that, the bot handles reminders automatically while it is running.
+
+Admin commands:
+
+| Command | Description |
+| --- | --- |
+| `/event_sync` | Fetches matching Discord Scheduled Events and tracks them locally. |
+| `/event_list` | Shows upcoming tracked events, reminder status, agenda count, event links, and admin-only technical details. |
+| `/event_reset_reminders` | Resets reminder flags for the selected meeting, or the next meeting by default. |
+| `/agenda_remove` | Removes an agenda item. Uses autocomplete for agenda item choices where available. |
+
+Use `/event_reset_reminders` if an event time changes and you want the bot to be able to send reminders again.
+
+## Environment Variables
+
+Create a local `.env` file:
+
+```text
+DISCORD_TOKEN=
+GUILD_ID=
+ANNOUNCEMENT_CHANNEL_ID=
+ALUMNI_ROLE_ID=
+TIMEZONE=America/New_York
+EVENT_NAME_FILTER=Alumni Association Monthly Meeting
+```
+
+Field meanings:
+
+- `DISCORD_TOKEN`: Discord bot token.
+- `GUILD_ID`: Discord server ID.
+- `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
+- `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
+- `TIMEZONE`: Default timezone for readable admin labels.
+- `EVENT_NAME_FILTER`: Case-insensitive text used to identify alumni meeting Discord Events.
+
+Keep `.env` private. Do not commit it.
+
+## Bot Permissions
+
+The bot should only need:
 
 - Send Messages
 - Use Slash Commands
 - Read Message History
 - Mention Roles
+- Access to view/fetch server scheduled events
 
 It does not need Administrator permission.
 
-## Invite the Bot
+When reminders are sent, the bot allows only role mentions so the configured alumni role can be pinged safely.
 
-1. In the Discord Developer Portal, open your application.
-2. Go to **OAuth2**.
-3. Open **URL Generator**.
-4. Under **Scopes**, select:
+## Create and Invite the Discord Bot
+
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Select **New Application**.
+3. Open **Bot** in the left sidebar.
+4. Select **Add Bot**.
+5. Copy the bot token into `.env` as `DISCORD_TOKEN`.
+6. Open **OAuth2** and then **URL Generator**.
+7. Select scopes:
    - `bot`
    - `applications.commands`
-5. Under **Bot Permissions**, select:
-   - Send Messages
-   - Use Slash Commands
-   - Read Message History
-   - Mention Roles
-6. Open the generated URL and invite the bot to your server.
+8. Select the bot permissions listed above.
+9. Open the generated URL and invite the bot to your server.
 
 ## Copy Discord IDs
 
@@ -84,28 +133,10 @@ Enable Developer Mode:
 Copy IDs:
 
 - Server ID: right-click the server name and choose **Copy Server ID**.
-- Channel ID: right-click the announcement channel and choose **Copy Channel ID**.
+- Channel ID: right-click the reminder channel and choose **Copy Channel ID**.
 - Role ID: go to server settings roles, right-click the alumni role, and choose **Copy Role ID**.
 
-## Configure Environment
-
-Copy `.env.example` to `.env`:
-
-```text
-DISCORD_TOKEN=
-GUILD_ID=
-ANNOUNCEMENT_CHANNEL_ID=
-ALUMNI_ROLE_ID=
-TIMEZONE=America/New_York
-```
-
-Field meanings:
-
-- `DISCORD_TOKEN`: Discord bot token.
-- `GUILD_ID`: Discord server ID.
-- `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
-- `ALUMNI_ROLE_ID`: Role ID for the alumni role.
-- `TIMEZONE`: Timezone for meeting input, usually `America/New_York`.
+These IDs are only needed in `.env`; normal members never need them.
 
 ## Install Locally
 
@@ -133,6 +164,8 @@ Install requirements:
 pip install -r requirements.txt
 ```
 
+The `tzdata` package is included so Python's `zoneinfo` module can resolve `America/New_York` reliably on Windows.
+
 Run the bot:
 
 ```bash
@@ -141,36 +174,38 @@ python bot.py
 
 The bot creates `alumni_bot.db` automatically the first time it starts.
 
-## Time Format
-
-Use this format for meeting start times:
-
-```text
-YYYY-MM-DD HH:MM
-```
-
-The bot interprets this time in the configured `TIMEZONE`, stores it internally as UTC, and displays it with Discord timestamp formatting so each user sees the meeting time in their own local timezone.
-
 ## Reminder Behavior
 
-The bot checks once per minute.
+The bot syncs Discord Scheduled Events every 5 minutes and checks reminders every 60 seconds.
 
-- It sends a 7-day reminder when the meeting is 7 days away or less.
-- It sends a 1-hour reminder when the meeting is 1 hour away or less.
+- It tracks scheduled or active Discord events whose names contain `EVENT_NAME_FILTER`.
+- It sends a 7-day reminder when the event is 7 days away or less.
+- It sends a 1-hour reminder when the event is 1 hour away or less.
 - It marks each reminder as sent in SQLite.
-- Restarting the bot does not resend reminders that were already marked sent.
-- If the bot was offline at the exact reminder time, it sends the reminder after it comes back online as long as the meeting has not already started.
-- It does not send reminders for meetings that have already started.
+- Restarting the bot does not resend reminders already marked sent.
+- If the bot was offline at the exact reminder time, it sends the reminder after it comes back online as long as the event has not already started.
+- It does not send reminders after the event has started.
+
+Reminder messages include:
+
+- Alumni role ping
+- Meeting time using Discord timestamp formatting
+- Native Discord event link
+- Current agenda items, if any
+- RSVP prompt for the native Discord event
 
 ## Agenda Behavior
 
-Any server member can add agenda items with `/agenda_add`.
+Members add agenda items with:
+
+```text
+/agenda_add item:"Your topic here"
+```
 
 Validation rules:
 
-- The meeting must exist.
-- The meeting must be active.
-- The meeting must not have started.
+- The bot must be able to find an upcoming matching Discord event.
+- The event must not have started.
 - Agenda items must not be empty.
 - Agenda items must be 500 characters or fewer.
 

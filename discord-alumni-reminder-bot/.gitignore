@@ -1,5 +1,6 @@
 .env
 alumni_bot.db
+*.log
 __pycache__/
 *.py[cod]
 .venv/
