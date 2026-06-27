@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 import uuid
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
 
@@ -14,9 +14,15 @@ os.environ.setdefault("GUILD_ID", "123")
 os.environ.setdefault("ANNOUNCEMENT_CHANNEL_ID", "456")
 os.environ.setdefault("ALUMNI_ROLE_ID", "789")
 os.environ.setdefault("TIMEZONE", "America/New_York")
-os.environ.setdefault("EVENT_NAME_FILTER", "Alumni")
 
 import bot  # noqa: E402
+
+
+class FakeScheduledEvent:
+    def __init__(self, name: str, start_time, status_name: str = "scheduled") -> None:
+        self.name = name
+        self.start_time = start_time
+        self.status = type("Status", (), {"name": status_name})()
 
 
 class SafetyTestCase(unittest.TestCase):
@@ -97,6 +103,46 @@ class SafetyTestCase(unittest.TestCase):
         self.assertIn("Meeting time", message)
         self.assertIn("Discord event", message)
         self.assertIn("Agenda truncated for safety", message)
+
+    def test_tracked_events_schema_has_new_reminder_flags(self) -> None:
+        with bot.get_db() as conn:
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(tracked_events)").fetchall()}
+
+        self.assertIn("seven_day_sent", columns)
+        self.assertIn("one_day_sent", columns)
+        self.assertIn("day_of_sent", columns)
+
+    def test_day_of_reminder_due_at_four_pm_local_before_event(self) -> None:
+        local_tz = bot.config.timezone
+        event_start = datetime(2026, 7, 1, 19, 30, tzinfo=local_tz).astimezone(timezone.utc)
+        before_four = datetime(2026, 7, 1, 15, 59, tzinfo=local_tz).astimezone(timezone.utc)
+        at_four = datetime.combine(
+            datetime(2026, 7, 1).date(),
+            time(hour=16),
+            tzinfo=local_tz,
+        ).astimezone(timezone.utc)
+        after_start = datetime(2026, 7, 1, 20, 0, tzinfo=local_tz).astimezone(timezone.utc)
+
+        self.assertFalse(bot.day_of_reminder_due(before_four, event_start, local_tz))
+        self.assertTrue(bot.day_of_reminder_due(at_four, event_start, local_tz))
+        self.assertFalse(bot.day_of_reminder_due(after_start, event_start, local_tz))
+
+    def test_event_eligibility_does_not_require_name_filter(self) -> None:
+        event = FakeScheduledEvent("Completely Different Event Name", bot.utc_now() + timedelta(days=3))
+
+        self.assertIsNone(bot.event_rejection_reason(event, bot.config))
+
+    def test_parse_discord_event_id_from_link_or_id(self) -> None:
+        self.assertEqual(
+            bot.parse_discord_event_id("https://discord.com/events/1018558247420047522/1511571175204065330"),
+            1511571175204065330,
+        )
+        self.assertEqual(
+            bot.parse_discord_event_id("https://discordapp.com/events/1018558247420047522/1511571175204065330"),
+            1511571175204065330,
+        )
+        self.assertEqual(bot.parse_discord_event_id("1511571175204065330"), 1511571175204065330)
+        self.assertIsNone(bot.parse_discord_event_id("not an event"))
 
 
 if __name__ == "__main__":

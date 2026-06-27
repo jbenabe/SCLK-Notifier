@@ -76,7 +76,7 @@ Structured in-memory result returned by event sync.
 | `fetched_count` | integer | Number of Discord events returned by API. |
 | `matched_count` | integer | Number of events accepted by eligibility rules. |
 | `matched_events` | list | Event ID, name, status, and start time summaries. |
-| `non_matching_events` | list | Limited diagnostic list of future scheduled events rejected by filter/status/time. |
+| `non_matching_events` | list | Limited diagnostic list of scheduled events rejected by status/time. |
 | `error` | optional string | Permission, fetch, or unexpected Discord API failure. |
 
 This model does not need to be persisted; it exists to improve admin feedback and logs.

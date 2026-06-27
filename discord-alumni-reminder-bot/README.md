@@ -9,8 +9,8 @@ The bot does not create Discord Events, manage RSVPs, or sync with Google Calend
 ## What It Does
 
 - Reads native Discord Scheduled Events from one configured server
-- Tracks events whose names contain `EVENT_NAME_FILTER`
-- Sends reminders to the configured alumni role 7 days before and 1 hour before each tracked event
+- Tracks upcoming scheduled or active Discord events
+- Sends reminders to the configured alumni role 7 days before, 1 day before, and around 4:00 PM local time on the event day
 - Includes the Discord event link in reminder messages
 - Lets members add agenda items without copying IDs
 - Stores reminder flags and agenda items in `alumni_bot.db`
@@ -44,14 +44,13 @@ The bot automatically attaches the agenda item to the next upcoming matching Dis
 Admin commands require the Discord **Manage Server** permission.
 
 1. Create the recurring alumni meeting using Discord's normal Event UI.
-2. Make sure the event name contains the configured `EVENT_NAME_FILTER`.
-3. Run:
+2. Run:
 
 ```text
 /event_sync
 ```
 
-4. Confirm the bot sees the event:
+3. Confirm the bot sees the event:
 
 ```text
 /event_list
@@ -64,8 +63,10 @@ Admin commands:
 | Command | Description |
 | --- | --- |
 | `/event_sync` | Fetches matching Discord Scheduled Events and tracks them locally. |
+| `/event_check_access` | Checks whether the bot can see a specific Discord event link or ID. |
 | `/event_list` | Shows upcoming tracked events, reminder status, agenda count, event links, and admin-only technical details. |
 | `/event_reset_reminders` | Resets reminder flags for the selected meeting, or the next meeting by default. |
+| `/event_test_reminder` | Previews a reminder safely, or posts a test reminder mentioning only the admin who ran it. |
 | `/agenda_remove` | Removes an agenda item. Uses autocomplete for agenda item choices where available. |
 
 Use `/event_reset_reminders` if an event time changes and you want the bot to be able to send reminders again.
@@ -80,7 +81,7 @@ GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
 TIMEZONE=America/New_York
-EVENT_NAME_FILTER=Alumni Association Monthly Meeting
+DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
 ```
 
@@ -91,7 +92,7 @@ Field meanings:
 - `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
 - `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
 - `TIMEZONE`: Default timezone for readable admin labels.
-- `EVENT_NAME_FILTER`: Case-insensitive text used to identify alumni meeting Discord Events.
+- `DISCORD_BOT_PERMISSIONS`: Bot invite permission integer. Use `8462797117848576` when regenerating the OAuth2 invite URL.
 - `REMINDERS_ENABLED`: Optional emergency stop for public reminder posting. Defaults to `true`; set to `false` and restart the bot to prevent reminder posts.
 
 Keep `.env` private. Do not commit it.
@@ -123,7 +124,8 @@ Member-submitted agenda text is displayed with Discord mentions and markdown neu
 7. Select scopes:
    - `bot`
    - `applications.commands`
-8. Select the bot permissions listed above.
+8. Use this bot permissions integer:
+   - `8462797117848576`
 9. Open the generated URL and invite the bot to your server.
 
 ## Copy Discord IDs
@@ -190,9 +192,10 @@ The bot creates `alumni_bot.db` automatically the first time it starts.
 
 The bot syncs Discord Scheduled Events every 5 minutes and checks reminders every 60 seconds.
 
-- It tracks scheduled or active Discord events whose names contain `EVENT_NAME_FILTER`.
+- It syncs before slash command responses and tracks any upcoming scheduled or active Discord event in the configured server.
 - It sends a 7-day reminder when the event is 7 days away or less.
-- It sends a 1-hour reminder when the event is 1 hour away or less.
+- It sends a 1-day reminder when the event is 1 day away or less.
+- It sends a day-of reminder around 4:00 PM in `TIMEZONE` if the event has not started.
 - It marks each reminder as sent in SQLite.
 - It can be prevented from posting public reminders by setting `REMINDERS_ENABLED=false`.
 - Restarting the bot does not resend reminders already marked sent.
@@ -206,6 +209,22 @@ Reminder messages include:
 - Native Discord event link
 - Current agenda items, if any
 - RSVP prompt for the native Discord event
+
+## Safe Reminder Testing
+
+Admins can test reminder content without pinging the alumni role:
+
+```text
+/event_test_reminder reminder_type:"7-day reminder"
+```
+
+By default this returns an ephemeral preview only. To post a real test message to the announcement channel while mentioning only yourself, run:
+
+```text
+/event_test_reminder reminder_type:"7-day reminder" send_to_channel:true
+```
+
+Use the test command before resetting real reminder flags or waiting for live reminder windows.
 
 ## Agenda Behavior
 
@@ -248,25 +267,39 @@ Then restart the bot.
 
 ## Troubleshooting
 
-If `/event_sync` finds no matching events, check:
+If `/event_sync` finds no upcoming events, check:
 
 - The event is in the configured server.
 - The event is scheduled for the future.
 - The event status is scheduled or active.
-- The event name contains `EVENT_NAME_FILTER`.
 - The bot can view/fetch server scheduled events.
 
+If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
+
+Admins can check a specific event link with:
+
+```text
+/event_check_access event:"https://discord.com/events/server-id/event-id"
+```
+
+If Discord reports `Missing Access`, the bot can see the server but cannot see that event. Most often, the event is attached to a channel the bot role cannot view. Give the bot role access to that channel, or recreate the event in a channel the bot can view, then run `/event_sync`.
+
 If a slash command times out or Discord reports `Unknown interaction`, the command likely took too long before acknowledgement. Slow commands now defer ephemerally before fetching Discord data; check logs for Discord API errors around the command time.
+
+Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does not use Discord voice.
 
 ## Discord Smoke Test
 
 1. Start the bot and confirm slash command sync appears in the logs.
-2. Create a future Discord Scheduled Event whose name contains `EVENT_NAME_FILTER`.
+2. Create a future Discord Scheduled Event in the configured server.
 3. Run `/event_sync` as an admin and confirm the event is tracked.
-4. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
-5. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
-6. Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
-7. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
+4. If sync does not find it, run `/event_check_access event:"your event link"`.
+5. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
+6. Run `/event_test_reminder reminder_type:"7-day reminder"` and confirm the preview looks right.
+7. Run `/event_test_reminder reminder_type:"7-day reminder" send_to_channel:true` and confirm it mentions only you.
+8. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+9. Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
+10. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
 
 ## Hosting Notes
 

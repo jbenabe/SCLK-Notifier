@@ -11,7 +11,7 @@
 - **Storage**: Local SQLite database `alumni_bot.db`
 - **External System**: Discord Gateway, Slash Commands, Scheduled Events API
 - **Current Shape**: One large `bot.py` file with config, persistence, Discord client, command handlers, and reminder logic together
-- **Known Failure From Log**: Bot logged in and synced commands, found zero matching events, then `/next_meeting` raised Discord `404 Unknown interaction`, likely because slow sync work happened before interaction acknowledgement
+- **Known Failure From Log**: Bot logged in and synced commands, found zero visible/eligible events, then `/next_meeting` raised Discord `404 Unknown interaction`, likely because slow sync work happened before interaction acknowledgement
 
 ## Constitution Check
 
@@ -32,7 +32,7 @@ Extraction into modules is deferred until tests or maintenance pressure justify 
 
 1. Confirm `.env`, `alumni_bot.db`, logs, `.venv`, and generated caches remain ignored.
 2. Add a `README` troubleshooting section for the two observed classes of failures:
-   - Zero matching Discord Scheduled Events.
+   - Zero visible or eligible Discord Scheduled Events.
    - Discord `Unknown interaction` caused by missed response windows.
 3. Add a small local test harness or unit test setup before refactoring business logic.
 
@@ -55,12 +55,12 @@ Acceptance target:
    - Matching event summaries.
    - Non-matching future scheduled event names and start times, limited to a safe count.
    - Fetch/permission errors.
-2. Update `/event_sync` no-match output to explain exactly what filter was used and what Discord returned.
+2. Update `/event_sync` no-event output to explain exactly what Discord returned.
 3. Update logs to include event IDs, names, statuses, and eligibility reasons at debug/info level.
 
 Acceptance target:
 
-- An admin can distinguish "no scheduled events", "events exist but filter mismatch", and "bot cannot fetch events" from command output.
+- An admin can distinguish "no scheduled events", "events exist but are ineligible", and "bot cannot fetch events" from command output.
 
 ## Phase 3 - Testable Core Logic In Place
 
@@ -139,7 +139,7 @@ Acceptance target:
 
 ## Milestone Definition Of Done
 
-- Member commands work with and without a matching event.
+- Member commands work with and without an upcoming server event.
 - Admin commands explain sync state clearly.
 - Reminder logic is covered by local tests and remains idempotent.
 - Member write commands are covered by abuse-control tests and cannot create public spam.

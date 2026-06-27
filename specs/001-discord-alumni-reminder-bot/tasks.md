@@ -22,8 +22,8 @@
 ## Phase 3: Event Sync Diagnostics
 
 - [ ] T011 Introduce a sync result object with fetched count, matched events, non-matching event diagnostics, and optional error.
-- [ ] T012 Record event eligibility rejection reasons for status, missing start time, past start time, and filter mismatch.
-- [ ] T013 Update `/event_sync` no-match output to show the configured filter and limited non-matching event names.
+- [ ] T012 Record event eligibility rejection reasons for status, missing start time, and past start time.
+- [ ] T013 Update `/event_sync` no-event output to show fetched event counts and limited ineligible event names.
 - [ ] T014 Update `/event_list` to preserve current admin details while using structured sync results.
 - [ ] T015 Add logging for fetched scheduled event count and matched event count.
 
@@ -79,4 +79,4 @@
 
 ## MVP Completion Target
 
-The next implementation pass should complete T001-T015 first. That addresses the observed broken state directly: the bot should respond reliably to slash commands and admins should be able to diagnose why no Discord Scheduled Events are matching.
+The next implementation pass should complete T001-T015 first. That addresses the observed broken state directly: the bot should respond reliably to slash commands and admins should be able to diagnose why no Discord Scheduled Events are visible or eligible.
