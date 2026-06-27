@@ -1,10 +1,12 @@
 import logging
 import os
+import re
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import discord
@@ -15,6 +17,18 @@ from dotenv import load_dotenv
 
 DB_PATH = Path(__file__).with_name("alumni_bot.db")
 AGENDA_ITEM_LIMIT = 500
+AGENDA_ADD_COOLDOWN_SECONDS = 300
+AGENDA_USER_EVENT_LIMIT = 3
+AGENDA_EVENT_LIMIT = 25
+REJECTED_WRITE_LIMIT = 5
+REJECTED_WRITE_WINDOW_SECONDS = 600
+REJECTED_WRITE_COOLDOWN_SECONDS = 1800
+PUBLIC_MESSAGE_MAX_CHARS = 1800
+PUBLIC_AGENDA_LINE_LIMIT = 10
+DIAGNOSTIC_EVENT_LIMIT = 5
+
+MENTION_PATTERN = re.compile(r"<(@!?\d+|@&\d+|#\d+)>")
+MARKDOWN_CHARS = "\\*_~`>|"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +46,27 @@ class Config:
     timezone_name: str
     timezone: ZoneInfo
     event_name_filter: str
+    reminders_enabled: bool
+
+
+@dataclass(frozen=True)
+class EventDiagnostic:
+    name: str
+    status: str
+    start_time: Optional[datetime]
+    reason: str
+
+
+@dataclass(frozen=True)
+class SyncResult:
+    fetched_count: int
+    matched_events: list[discord.ScheduledEvent]
+    diagnostics: list[EventDiagnostic]
+    error: Optional[str] = None
+
+    @property
+    def matched_count(self) -> int:
+        return len(self.matched_events)
 
 
 def load_config() -> Config:
@@ -52,6 +87,12 @@ def load_config() -> Config:
     try:
         timezone_name = os.environ["TIMEZONE"]
         bot_timezone = ZoneInfo(timezone_name)
+        reminders_enabled = os.getenv("REMINDERS_ENABLED", "true").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
         return Config(
             discord_token=os.environ["DISCORD_TOKEN"],
             guild_id=int(os.environ["GUILD_ID"]),
@@ -60,6 +101,7 @@ def load_config() -> Config:
             timezone_name=timezone_name,
             timezone=bot_timezone,
             event_name_filter=os.environ["EVENT_NAME_FILTER"].strip(),
+            reminders_enabled=reminders_enabled,
         )
     except ValueError as exc:
         raise ValueError("GUILD_ID, ANNOUNCEMENT_CHANNEL_ID, and ALUMNI_ROLE_ID must be numeric IDs.") from exc
@@ -67,10 +109,15 @@ def load_config() -> Config:
         raise ValueError(f"Invalid TIMEZONE value: {os.environ['TIMEZONE']}") from exc
 
 
-def get_db() -> sqlite3.Connection:
+@contextmanager
+def get_db() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
@@ -115,6 +162,19 @@ def init_db() -> None:
             """
         )
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS abuse_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                discord_user_id TEXT,
+                discord_event_id TEXT,
+                details TEXT,
+                created_at_utc TEXT NOT NULL
+            )
+            """
+        )
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -146,17 +206,24 @@ def event_status_name(status: object) -> str:
 
 
 def event_is_eligible(event: discord.ScheduledEvent, config: Config) -> bool:
+    return event_rejection_reason(event, config) is None
+
+
+def event_rejection_reason(event: discord.ScheduledEvent, config: Config) -> Optional[str]:
     if not event.start_time:
-        return False
+        return "missing start time"
 
     status = event_status_name(event.status).lower()
     if status not in {"scheduled", "active"}:
-        return False
+        return f"status is {event_status_name(event.status)}"
 
     if event.start_time.astimezone(timezone.utc) <= utc_now():
-        return False
+        return "event already started"
 
-    return config.event_name_filter.lower() in event.name.lower()
+    if config.event_name_filter.lower() not in event.name.lower():
+        return "name does not match filter"
+
+    return None
 
 
 def event_link(guild_id: int, discord_event_id: str) -> str:
@@ -282,6 +349,36 @@ def mark_reminder_sent(discord_event_id: str, reminder_column: str) -> None:
         )
 
 
+def log_abuse_event(
+    event_type: str,
+    discord_user_id: Optional[int | str] = None,
+    discord_event_id: Optional[int | str] = None,
+    details: Optional[str] = None,
+) -> None:
+    safe_details = None if details is None else sanitize_operational_details(details)[:500]
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO abuse_events (
+                event_type, discord_user_id, discord_event_id, details, created_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                event_type,
+                None if discord_user_id is None else str(discord_user_id),
+                None if discord_event_id is None else str(discord_event_id),
+                safe_details,
+                datetime_to_db(utc_now()),
+            ),
+        )
+
+
+def sanitize_operational_details(value: str) -> str:
+    redacted = re.sub(r"DISCORD_TOKEN\s*=\s*\S+", "DISCORD_TOKEN=[redacted]", value)
+    return redacted.replace("\n", " ").strip()
+
+
 def add_agenda_item(
     discord_event_id: str,
     item_text: str,
@@ -308,6 +405,86 @@ def add_agenda_item(
         return int(cursor.lastrowid)
 
 
+def count_active_agenda_items(discord_event_id: str) -> int:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count FROM agenda_items
+            WHERE discord_event_id = ? AND active = 1
+            """,
+            (discord_event_id,),
+        ).fetchone()
+        return int(row["count"])
+
+
+def count_user_agenda_items(discord_event_id: str, submitted_by_user_id: int | str) -> int:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count FROM agenda_items
+            WHERE discord_event_id = ?
+              AND submitted_by_user_id = ?
+              AND active = 1
+            """,
+            (discord_event_id, str(submitted_by_user_id)),
+        ).fetchone()
+        return int(row["count"])
+
+
+def get_user_last_agenda_item_time(submitted_by_user_id: int | str) -> Optional[datetime]:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT created_at_utc FROM agenda_items
+            WHERE submitted_by_user_id = ?
+            ORDER BY created_at_utc DESC
+            LIMIT 1
+            """,
+            (str(submitted_by_user_id),),
+        ).fetchone()
+    if row is None:
+        return None
+    return datetime_from_db(row["created_at_utc"])
+
+
+def user_has_rejection_cooldown(discord_user_id: int | str) -> bool:
+    cutoff = datetime_to_db(utc_now() - timedelta(seconds=REJECTED_WRITE_COOLDOWN_SECONDS))
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT 1 FROM abuse_events
+            WHERE event_type = 'cooldown_started'
+              AND discord_user_id = ?
+              AND created_at_utc >= ?
+            ORDER BY created_at_utc DESC
+            LIMIT 1
+            """,
+            (str(discord_user_id), cutoff),
+        ).fetchone()
+    return row is not None
+
+
+def record_rejected_write(
+    discord_user_id: int | str,
+    discord_event_id: Optional[int | str],
+    reason: str,
+) -> None:
+    log_abuse_event("rejected_write", discord_user_id, discord_event_id, reason)
+    cutoff = datetime_to_db(utc_now() - timedelta(seconds=REJECTED_WRITE_WINDOW_SECONDS))
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count FROM abuse_events
+            WHERE event_type = 'rejected_write'
+              AND discord_user_id = ?
+              AND created_at_utc >= ?
+            """,
+            (str(discord_user_id), cutoff),
+        ).fetchone()
+    if int(row["count"]) >= REJECTED_WRITE_LIMIT and not user_has_rejection_cooldown(discord_user_id):
+        log_abuse_event("cooldown_started", discord_user_id, discord_event_id, reason)
+
+
 def list_agenda_items(discord_event_id: str) -> list[sqlite3.Row]:
     with get_db() as conn:
         return conn.execute(
@@ -329,16 +506,54 @@ def remove_agenda_item(agenda_item_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def format_agenda_lines(discord_event_id: str, include_submitters: bool = False) -> list[str]:
+def sanitize_display_text(value: str) -> str:
+    text = value.replace("\r", " ").replace("\n", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"@(everyone|here)\b", r"@ \1", text, flags=re.IGNORECASE)
+    text = MENTION_PATTERN.sub(lambda match: f"< {match.group(1)}>", text)
+    for char in MARKDOWN_CHARS:
+        text = text.replace(char, f"\\{char}")
+    return text
+
+
+def format_agenda_lines(
+    discord_event_id: str,
+    include_submitters: bool = False,
+    max_items: Optional[int] = None,
+) -> list[str]:
     items = list_agenda_items(discord_event_id)
+    if max_items is not None:
+        items = items[:max_items]
     lines = []
     for index, row in enumerate(items, start=1):
+        item_text = sanitize_display_text(row["item_text"])
         if include_submitters:
-            submitter = row["submitted_by_display_name"] or "Unknown"
-            lines.append(f"{index}. {row['item_text']} - submitted by {submitter}")
+            submitter = sanitize_display_text(row["submitted_by_display_name"] or "Unknown")
+            lines.append(f"{index}. {item_text} - submitted by {submitter}")
         else:
-            lines.append(f"{index}. {row['item_text']}")
+            lines.append(f"{index}. {item_text}")
     return lines
+
+
+def append_agenda_summary(lines: list[str], discord_event_id: str, heading: str) -> None:
+    all_items = list_agenda_items(discord_event_id)
+    agenda_lines = format_agenda_lines(discord_event_id, max_items=PUBLIC_AGENDA_LINE_LIMIT)
+    if agenda_lines:
+        lines.extend([heading, *agenda_lines])
+        remaining = len(all_items) - len(agenda_lines)
+        if remaining > 0:
+            lines.append(f"...and {remaining} more agenda item{'s' if remaining != 1 else ''}. Run /agenda for the full list.")
+    else:
+        lines.append("No agenda items have been added yet.")
+
+
+def truncate_public_message(lines: list[str]) -> str:
+    message = "\n".join(lines)
+    if len(message) <= PUBLIC_MESSAGE_MAX_CHARS:
+        return message
+
+    footer = "\n\nAgenda truncated for safety. Run /agenda for the full list."
+    return message[: max(0, PUBLIC_MESSAGE_MAX_CHARS - len(footer))].rstrip() + footer
 
 
 def user_can_manage_guild(interaction: discord.Interaction) -> bool:
@@ -351,16 +566,80 @@ async def require_manage_guild(interaction: discord.Interaction) -> bool:
         return True
 
     logger.info("Permission denied for user %s on admin command.", interaction.user.id)
-    await interaction.response.send_message(
-        "Only server admins can use this command.",
-        ephemeral=True,
-    )
+    log_abuse_event("permission_denied", interaction.user.id, details="admin command denied")
+    await send_ephemeral(interaction, "Only server admins can use this command.")
     return False
+
+
+async def defer_ephemeral(interaction: discord.Interaction) -> None:
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+
+
+async def send_ephemeral(interaction: discord.Interaction, content: str) -> None:
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(content, ephemeral=True)
+        else:
+            await interaction.response.send_message(content, ephemeral=True)
+    except discord.NotFound:
+        logger.exception("Interaction expired before response could be sent for user %s.", interaction.user.id)
 
 
 def short_event_label(row: sqlite3.Row, config: Config) -> str:
     start_time = datetime_from_db(row["start_time_utc"]).astimezone(config.timezone)
-    return f"{row['name']} - {start_time:%b %d, %Y at %I:%M %p}"
+    return f"{sanitize_display_text(row['name'])} - {start_time:%b %d, %Y at %I:%M %p}"
+
+
+def describe_sync_result(result: SyncResult, config: Config) -> str:
+    if result.error:
+        return result.error
+
+    lines = [
+        "No matching Discord events found.",
+        "",
+        "I am looking for events whose name contains:",
+        f'"{config.event_name_filter}"',
+        "",
+        f"Discord returned {result.fetched_count} scheduled event{'s' if result.fetched_count != 1 else ''}.",
+    ]
+    if result.diagnostics:
+        lines.extend(["", "Closest non-matching events I inspected:"])
+        for diagnostic in result.diagnostics[:DIAGNOSTIC_EVENT_LIMIT]:
+            start_label = "no start time"
+            if diagnostic.start_time is not None:
+                start_label = to_discord_timestamp(diagnostic.start_time)
+            lines.append(
+                f"- {sanitize_display_text(diagnostic.name)} - {diagnostic.status}, {start_label}; {diagnostic.reason}"
+            )
+    else:
+        lines.extend(["", "No Discord scheduled events were returned for this server."])
+    lines.extend(
+        [
+            "",
+            "Check the event name, event status, event time, and bot access to server scheduled events.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def agenda_write_rejection_reason(event: sqlite3.Row, user_id: int | str) -> Optional[str]:
+    if user_has_rejection_cooldown(user_id):
+        return "Too many rejected agenda attempts. Please wait before trying again."
+
+    last_item_time = get_user_last_agenda_item_time(user_id)
+    if last_item_time is not None:
+        cooldown_until = last_item_time + timedelta(seconds=AGENDA_ADD_COOLDOWN_SECONDS)
+        if utc_now() < cooldown_until:
+            return "Please wait a few minutes before adding another agenda item."
+
+    if count_user_agenda_items(event["discord_event_id"], user_id) >= AGENDA_USER_EVENT_LIMIT:
+        return f"You already have {AGENDA_USER_EVENT_LIMIT} agenda items for this meeting."
+
+    if count_active_agenda_items(event["discord_event_id"]) >= AGENDA_EVENT_LIMIT:
+        return "This meeting agenda is full. Please ask an admin to review existing items."
+
+    return None
 
 
 class AlumniReminderBot(commands.Bot):
@@ -406,18 +685,32 @@ class AlumniReminderBot(commands.Bot):
 
         return channel
 
-    async def sync_events(self) -> tuple[int, list[discord.ScheduledEvent]]:
+    async def sync_events(self) -> SyncResult:
         guild = await self.get_configured_guild()
         if guild is None:
-            return 0, []
+            return SyncResult(0, [], [], "Could not fetch configured guild.")
 
         try:
             scheduled_events = await guild.fetch_scheduled_events()
         except discord.DiscordException:
             logger.exception("Could not fetch scheduled events for guild %s.", self.config.guild_id)
-            return 0, []
+            return SyncResult(0, [], [], "Could not fetch scheduled events. Check bot permissions.")
 
-        matching_events = [event for event in scheduled_events if event_is_eligible(event, self.config)]
+        matching_events = []
+        diagnostics = []
+        for event in scheduled_events:
+            rejection_reason = event_rejection_reason(event, self.config)
+            if rejection_reason is None:
+                matching_events.append(event)
+            else:
+                diagnostics.append(
+                    EventDiagnostic(
+                        name=event.name,
+                        status=event_status_name(event.status),
+                        start_time=event.start_time,
+                        reason=rejection_reason,
+                    )
+                )
         seen_event_ids = {str(event.id) for event in matching_events}
 
         for event in matching_events:
@@ -426,8 +719,12 @@ class AlumniReminderBot(commands.Bot):
 
         mark_unseen_events_inactive(seen_event_ids)
         mark_started_events_inactive()
-        logger.info("Event sync complete. Found %s matching events.", len(matching_events))
-        return len(matching_events), matching_events
+        logger.info(
+            "Event sync complete. Fetched %s events and found %s matching events.",
+            len(scheduled_events),
+            len(matching_events),
+        )
+        return SyncResult(len(scheduled_events), matching_events, diagnostics)
 
     async def get_next_event_with_sync(self) -> Optional[sqlite3.Row]:
         event = get_next_tracked_event()
@@ -438,15 +735,30 @@ class AlumniReminderBot(commands.Bot):
         return get_next_tracked_event()
 
     async def send_reminder(self, event: sqlite3.Row, reminder_type: str) -> bool:
-        start_time = datetime_from_db(event["start_time_utc"])
+        if not self.config.reminders_enabled:
+            log_abuse_event("reminder_skipped", discord_event_id=event["discord_event_id"], details="reminders disabled")
+            logger.info("Skipped %s reminder for event %s because reminders are disabled.", reminder_type, event["discord_event_id"])
+            return False
+
+        fresh_event = get_tracked_event(event["discord_event_id"])
+        if fresh_event is None:
+            log_abuse_event("reminder_skipped", discord_event_id=event["discord_event_id"], details="event inactive or missing")
+            logger.warning("Skipped %s reminder for event %s because the event is inactive or missing.", reminder_type, event["discord_event_id"])
+            return False
+
+        start_time = datetime_from_db(fresh_event["start_time_utc"])
+        if start_time <= utc_now():
+            log_abuse_event("reminder_skipped", discord_event_id=event["discord_event_id"], details="event already started")
+            logger.info("Skipped %s reminder for event %s because the event has started.", reminder_type, event["discord_event_id"])
+            return False
+
         role_mention = f"<@&{self.config.alumni_role_id}>"
         timestamp = to_discord_timestamp(start_time)
         link = event_link(self.config.guild_id, event["discord_event_id"])
-        agenda_lines = format_agenda_lines(event["discord_event_id"])
 
         if reminder_type == "seven_day":
             lines = [
-                f"{role_mention} Reminder: {event['name']} is in 7 days.",
+                f"{role_mention} Reminder: {sanitize_display_text(fresh_event['name'])} is in 7 days.",
                 "",
                 f"Meeting time: {timestamp}",
                 "",
@@ -454,10 +766,8 @@ class AlumniReminderBot(commands.Bot):
                 link,
                 "",
             ]
-            if agenda_lines:
-                lines.extend(["Current agenda:", *agenda_lines, ""])
-            else:
-                lines.extend(["No agenda items have been added yet.", ""])
+            append_agenda_summary(lines, fresh_event["discord_event_id"], "Current agenda:")
+            lines.append("")
             lines.extend(
                 [
                     "Add an agenda item with:",
@@ -468,30 +778,31 @@ class AlumniReminderBot(commands.Bot):
             )
         else:
             lines = [
-                f"{role_mention} Reminder: {event['name']} starts in 1 hour.",
+                f"{role_mention} Reminder: {sanitize_display_text(fresh_event['name'])} starts in 1 hour.",
                 "",
                 f"Meeting time: {timestamp}",
                 "",
                 "Discord event:",
                 link,
             ]
-            if agenda_lines:
-                lines.extend(["", "Agenda:", *agenda_lines])
-            else:
-                lines.extend(["", "No agenda items have been added yet."])
+            lines.append("")
+            append_agenda_summary(lines, fresh_event["discord_event_id"], "Agenda:")
 
         channel = await self.get_announcement_channel()
         if channel is None:
+            log_abuse_event("send_failure", discord_event_id=event["discord_event_id"], details="announcement channel unavailable")
             return False
 
         try:
             await channel.send(
-                "\n".join(lines),
+                truncate_public_message(lines),
                 allowed_mentions=discord.AllowedMentions(roles=True, everyone=False, users=False),
             )
+            log_abuse_event("reminder_sent", discord_event_id=event["discord_event_id"], details=reminder_type)
             return True
         except discord.DiscordException:
             logger.exception("Failed to send %s reminder for event %s.", reminder_type, event["discord_event_id"])
+            log_abuse_event("send_failure", discord_event_id=event["discord_event_id"], details=reminder_type)
             return False
 
     @tasks.loop(minutes=5)
@@ -547,33 +858,45 @@ bot = AlumniReminderBot(config)
 @bot.tree.command(name="agenda_add", description="Add an item to the next alumni meeting agenda.")
 @app_commands.describe(item="Agenda item to add")
 async def agenda_add(interaction: discord.Interaction, item: str) -> None:
+    await defer_ephemeral(interaction)
     clean_item = item.strip()
     if not clean_item:
-        await interaction.response.send_message("Please enter an agenda item.", ephemeral=True)
+        record_rejected_write(interaction.user.id, None, "empty agenda item")
+        await send_ephemeral(interaction, "Please enter an agenda item.")
         return
 
     if len(clean_item) > AGENDA_ITEM_LIMIT:
-        await interaction.response.send_message(
+        record_rejected_write(interaction.user.id, None, "agenda item too long")
+        await send_ephemeral(
+            interaction,
             f"That agenda item is too long. Please keep agenda items under {AGENDA_ITEM_LIMIT} characters.",
-            ephemeral=True,
         )
         return
 
     event = await bot.get_next_event_with_sync()
     if event is None:
-        await interaction.response.send_message(
+        record_rejected_write(interaction.user.id, None, "no upcoming matching event")
+        await send_ephemeral(
+            interaction,
             "I could not find an upcoming Alumni Association meeting to attach this agenda item to.\n\n"
             "An admin may need to run:\n/event_sync",
-            ephemeral=True,
         )
         return
 
     start_time = datetime_from_db(event["start_time_utc"])
     if start_time <= utc_now():
-        await interaction.response.send_message(
+        record_rejected_write(interaction.user.id, event["discord_event_id"], "meeting already started")
+        await send_ephemeral(
+            interaction,
             "This meeting has already started, so new agenda items are closed.",
-            ephemeral=True,
         )
+        return
+
+    safety_rejection = agenda_write_rejection_reason(event, interaction.user.id)
+    if safety_rejection:
+        record_rejected_write(interaction.user.id, event["discord_event_id"], safety_rejection)
+        log_abuse_event("rate_limit_hit", interaction.user.id, event["discord_event_id"], safety_rejection)
+        await send_ephemeral(interaction, safety_rejection)
         return
 
     add_agenda_item(
@@ -584,22 +907,23 @@ async def agenda_add(interaction: discord.Interaction, item: str) -> None:
     )
     logger.info("User %s added agenda item to event %s.", interaction.user.id, event["discord_event_id"])
 
-    await interaction.response.send_message(
-        f"Added to the agenda for {event['name']}:\n"
+    await send_ephemeral(
+        interaction,
+        f"Added to the agenda for {sanitize_display_text(event['name'])}:\n"
         f"Meeting time: {to_discord_timestamp(start_time)}\n\n"
-        f'"{clean_item}"',
-        ephemeral=True,
+        f'"{sanitize_display_text(clean_item)}"',
     )
 
 
 @bot.tree.command(name="agenda", description="View the next alumni meeting agenda.")
 async def agenda(interaction: discord.Interaction) -> None:
+    await defer_ephemeral(interaction)
     event = await bot.get_next_event_with_sync()
     if event is None:
-        await interaction.response.send_message(
+        await send_ephemeral(
+            interaction,
             "I could not find an upcoming Alumni Association meeting.\n\n"
             "An admin should check that the Discord event exists, then run:\n/event_sync",
-            ephemeral=True,
         )
         return
 
@@ -609,33 +933,34 @@ async def agenda(interaction: discord.Interaction) -> None:
         body = "\n".join(agenda_lines)
     else:
         body = (
-            f"No agenda items have been added yet for the next {config.event_name_filter}.\n\n"
+            f"No agenda items have been added yet for the next {sanitize_display_text(config.event_name_filter)}.\n\n"
             'Add one with:\n/agenda_add item:"Your topic here"'
         )
 
-    await interaction.response.send_message(
-        f"Agenda for {event['name']}\n"
+    await send_ephemeral(
+        interaction,
+        f"Agenda for {sanitize_display_text(event['name'])}\n"
         f"Meeting time: {to_discord_timestamp(start_time)}\n\n"
         f"{body}",
-        ephemeral=True,
     )
 
 
 @bot.tree.command(name="next_meeting", description="Show the next alumni meeting.")
 async def next_meeting(interaction: discord.Interaction) -> None:
+    await defer_ephemeral(interaction)
     event = await bot.get_next_event_with_sync()
     if event is None:
-        await interaction.response.send_message(
+        await send_ephemeral(
+            interaction,
             "I could not find an upcoming Alumni Association meeting.\n\n"
             "An admin should check that the Discord event exists, then run:\n/event_sync",
-            ephemeral=True,
         )
         return
 
     start_time = datetime_from_db(event["start_time_utc"])
     agenda_count = len(list_agenda_items(event["discord_event_id"]))
     lines = [
-        f"Next meeting: {event['name']}",
+        f"Next meeting: {sanitize_display_text(event['name'])}",
         f"Time: {to_discord_timestamp(start_time)}",
         f"Discord event: {event_link(config.guild_id, event['discord_event_id'])}",
         "",
@@ -655,7 +980,7 @@ async def next_meeting(interaction: discord.Interaction) -> None:
             ]
         )
 
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    await send_ephemeral(interaction, "\n".join(lines))
 
 
 @bot.tree.command(name="event_sync", description="Sync native Discord events for alumni reminders.")
@@ -663,23 +988,21 @@ async def event_sync(interaction: discord.Interaction) -> None:
     if not await require_manage_guild(interaction):
         return
 
-    await interaction.response.defer(ephemeral=True)
-    count, events = await bot.sync_events()
-    if not events:
-        await interaction.followup.send(
-            "No matching Discord events found.\n\n"
-            "I am looking for events whose name contains:\n"
-            f'"{config.event_name_filter}"\n\n'
-            "Check that the Discord event exists and that EVENT_NAME_FILTER is set correctly.",
-            ephemeral=True,
-        )
+    await defer_ephemeral(interaction)
+    result = await bot.sync_events()
+    if not result.matched_events:
+        await send_ephemeral(interaction, describe_sync_result(result, config))
         return
 
-    lines = ["Event sync complete.", "", f"Found {count} matching event{'s' if count != 1 else ''}:"]
-    for event in events:
-        lines.append(f"{event.name} - {to_discord_timestamp(event.start_time)}")
+    lines = [
+        "Event sync complete.",
+        "",
+        f"Found {result.matched_count} matching event{'s' if result.matched_count != 1 else ''}:",
+    ]
+    for event in result.matched_events:
+        lines.append(f"{sanitize_display_text(event.name)} - {to_discord_timestamp(event.start_time)}")
     lines.extend(["", "These events are now being tracked for 7-day and 1-hour reminders."])
-    await interaction.followup.send("\n".join(lines), ephemeral=True)
+    await send_ephemeral(interaction, "\n".join(lines))
 
 
 @bot.tree.command(name="event_list", description="List tracked alumni events.")
@@ -687,14 +1010,11 @@ async def event_list(interaction: discord.Interaction) -> None:
     if not await require_manage_guild(interaction):
         return
 
-    await bot.sync_events()
+    await defer_ephemeral(interaction)
+    result = await bot.sync_events()
     events = list_tracked_events()
     if not events:
-        await interaction.response.send_message(
-            "No upcoming tracked alumni meetings found.\n\n"
-            "Create the Discord event first, then run:\n/event_sync",
-            ephemeral=True,
-        )
+        await send_ephemeral(interaction, describe_sync_result(result, config))
         return
 
     lines = ["Tracked Events"]
@@ -703,7 +1023,7 @@ async def event_list(interaction: discord.Interaction) -> None:
         lines.extend(
             [
                 "",
-                f"{index}. {row['name']}",
+                f"{index}. {sanitize_display_text(row['name'])}",
                 f"Time: {to_discord_timestamp(start_time)}",
                 f"Status: {row['status']}",
                 f"7-day reminder: {'Sent' if row['seven_day_sent'] else 'Not sent'}",
@@ -716,7 +1036,7 @@ async def event_list(interaction: discord.Interaction) -> None:
             ]
         )
 
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    await send_ephemeral(interaction, "\n".join(lines))
 
 
 async def event_autocomplete(
@@ -741,24 +1061,25 @@ async def event_reset_reminders(interaction: discord.Interaction, meeting: Optio
     if not await require_manage_guild(interaction):
         return
 
+    await defer_ephemeral(interaction)
     event = get_tracked_event(meeting) if meeting else await bot.get_next_event_with_sync()
     if event is None:
-        await interaction.response.send_message(
+        await send_ephemeral(
+            interaction,
             "I could not find an upcoming Alumni Association meeting to reset.",
-            ephemeral=True,
         )
         return
 
     if reset_reminder_flags(event["discord_event_id"]):
-        await interaction.response.send_message(
+        await send_ephemeral(
+            interaction,
             f"Reminder flags reset for:\n\n"
-            f"{event['name']}\n"
+            f"{sanitize_display_text(event['name'])}\n"
             f"Time: {to_discord_timestamp(datetime_from_db(event['start_time_utc']))}\n\n"
             "The bot may now send the 7-day and 1-hour reminders again if those reminder times are still valid.",
-            ephemeral=True,
         )
     else:
-        await interaction.response.send_message("I could not reset reminders for that meeting.", ephemeral=True)
+        await send_ephemeral(interaction, "I could not reset reminders for that meeting.")
 
 
 async def agenda_item_autocomplete(
@@ -772,8 +1093,8 @@ async def agenda_item_autocomplete(
     current_lower = current.lower()
     choices = []
     for row in list_agenda_items(event["discord_event_id"]):
-        submitter = row["submitted_by_display_name"] or "Unknown"
-        label = f"[{row['id']}] {row['item_text']} - {submitter}"
+        submitter = sanitize_display_text(row["submitted_by_display_name"] or "Unknown")
+        label = f"[{row['id']}] {sanitize_display_text(row['item_text'])} - {submitter}"
         if current_lower and current_lower not in label.lower():
             continue
         choices.append(app_commands.Choice(name=label[:100], value=int(row["id"])))
@@ -789,9 +1110,10 @@ async def agenda_remove(interaction: discord.Interaction, agenda_item: int) -> N
 
     if remove_agenda_item(agenda_item):
         logger.info("User %s removed agenda item %s.", interaction.user.id, agenda_item)
-        await interaction.response.send_message(f"Removed agenda item {agenda_item}.", ephemeral=True)
+        log_abuse_event("agenda_removed", interaction.user.id, details=f"agenda_item_id={agenda_item}")
+        await send_ephemeral(interaction, f"Removed agenda item {agenda_item}.")
     else:
-        await interaction.response.send_message("I could not find that active agenda item.", ephemeral=True)
+        await send_ephemeral(interaction, "I could not find that active agenda item.")
 
 
 def main() -> None:

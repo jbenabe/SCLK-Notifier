@@ -46,6 +46,26 @@ Member-submitted agenda entries associated with one tracked Discord event.
 - Agenda rows are soft-deleted by setting `active = 0`.
 - Active agenda items for a meeting are listed by `created_at_utc ASC`.
 - Agenda additions are allowed only before the linked meeting starts.
+- Agenda text may be stored as submitted for audit, but every display path must render a sanitized version that cannot create Discord mentions or deceptive formatting.
+- Agenda writes are subject to per-user cooldowns, per-user/per-event quotas, and total per-event quotas.
+
+## abuse_events
+
+Optional local audit table for safety-relevant events. This may be introduced when abuse controls move from specification to implementation.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | integer | yes | Local SQLite primary key. |
+| `event_type` | text | yes | Example: `rate_limit_hit`, `cooldown_started`, `permission_denied`, `send_failure`. |
+| `discord_user_id` | text | no | User associated with the event, when applicable. |
+| `discord_event_id` | text | no | Scheduled event associated with the event, when applicable. |
+| `details` | text | no | Sanitized operational detail; never tokens or secrets. |
+| `created_at_utc` | text | yes | ISO 8601 UTC timestamp. |
+
+### Invariants
+
+- Safety logs must not store Discord tokens, `.env` values, or private configuration secrets.
+- Abuse events are operational diagnostics and must not trigger public Discord messages by themselves.
 
 ## Sync Result
 
@@ -60,3 +80,17 @@ Structured in-memory result returned by event sync.
 | `error` | optional string | Permission, fetch, or unexpected Discord API failure. |
 
 This model does not need to be persisted; it exists to improve admin feedback and logs.
+
+## Safety Policy
+
+Structured in-memory policy used by agenda and reminder flows.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `agenda_add_cooldown_seconds` | integer | Minimum delay between accepted agenda writes by one user. |
+| `agenda_user_event_quota` | integer | Maximum active agenda items one user may add to one event. |
+| `agenda_event_quota` | integer | Maximum active agenda items allowed for one event. |
+| `rejected_write_cooldown_seconds` | integer | Temporary cooldown after repeated rejected writes. |
+| `public_message_max_chars` | integer | Maximum rendered public reminder length before truncation. |
+
+These values may start as constants and later become configuration if admins need tuning.

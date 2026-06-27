@@ -27,37 +27,55 @@
 - [ ] T014 Update `/event_list` to preserve current admin details while using structured sync results.
 - [ ] T015 Add logging for fetched scheduled event count and matched event count.
 
-## Phase 4: Testable Core Extraction
+## Phase 4: Testable Core In Place
 
-- [ ] T016 Move configuration loading into `config.py` with tests for missing and malformed values.
-- [ ] T017 Move SQLite schema and repository functions into `db.py`.
-- [ ] T018 Move event eligibility and event link formatting into `events.py` with unit tests.
-- [ ] T019 Move agenda validation and formatting into `agenda.py` with unit tests.
-- [ ] T020 Move reminder due-window checks and message composition into `reminders.py` with unit tests.
-- [ ] T021 Keep `bot.py` as the minimal process entrypoint after extraction.
+- [ ] T016 Keep `bot.py` as the implementation file for this hardening pass.
+- [ ] T017 Add tests for event eligibility and event sync diagnostics.
+- [ ] T018 Add tests for agenda validation limits.
+- [ ] T019 Add tests for mention neutralization and markdown-neutralized agenda rendering.
+- [ ] T020 Add tests for output budgets, cooldown decisions, and quota decisions.
+- [ ] T021 Add tests for reminder due-window checks and idempotency.
+- [ ] T022 Reconsider module extraction only after the single-file hardening pass is stable.
 
 ## Phase 5: Reminder Hardening
 
-- [ ] T022 Re-check event start time and active status immediately before sending a reminder.
-- [ ] T023 Ensure reminder flags are marked sent only after Discord message send succeeds.
-- [ ] T024 Decide and document behavior when an event is first discovered inside the 1-hour reminder window.
-- [ ] T025 Add tests proving repeated reminder checks do not duplicate sends.
-- [ ] T026 Add tests proving started events do not send reminders.
+- [ ] T023 Re-check event start time and active status immediately before sending a reminder.
+- [ ] T024 Ensure reminder flags are marked sent only after Discord message send succeeds.
+- [ ] T025 Add a maximum send budget per event and reminder type.
+- [ ] T026 Fail closed and log when reminder state, database state, or Discord send state is ambiguous.
+- [ ] T027 Decide and document behavior when an event is first discovered inside the 1-hour reminder window.
+- [ ] T028 Add tests proving repeated reminder checks do not duplicate sends.
+- [ ] T029 Add tests proving started events do not send reminders.
 
-## Phase 6: Admin And Member Polish
+## Phase 6: Abuse Controls And Output Safety
 
-- [ ] T027 Improve `/event_reset_reminders` response copy so admins understand when reminders may fire again.
-- [ ] T028 Improve `/agenda_remove` autocomplete labels for long agenda items.
-- [ ] T029 Add a manual Discord smoke-test section to README.
-- [ ] T030 Add a release checklist for local run, test run, Discord smoke test, and log review.
+- [ ] T030 Enforce a per-user `/agenda_add` cooldown before accepting another item.
+- [ ] T031 Enforce a per-user agenda item quota per event.
+- [ ] T032 Enforce a total active agenda item quota per event.
+- [ ] T033 Add a temporary local cooldown after repeated rejected member write attempts.
+- [ ] T034 Sanitize agenda item display text so user-submitted mentions and deceptive markdown cannot ping or mislead members.
+- [ ] T035 Cap public reminder message length and truncate agenda content safely with guidance to run `/agenda`.
+- [ ] T036 Log abuse-relevant events: rate-limit hits, cooldowns, denied permissions, agenda removals, reminder sends, and send failures.
+- [ ] T037 Add `REMINDERS_ENABLED=false` as an emergency stop for reminder posts.
+- [ ] T038 Add tests for agenda cooldowns, per-user quotas, per-event quotas, and rejected-write cooldowns.
+- [ ] T039 Add tests proving public reminder output respects the maximum rendered size.
+
+## Phase 7: Admin And Member Polish
+
+- [ ] T040 Improve `/event_reset_reminders` response copy so admins understand when reminders may fire again.
+- [ ] T041 Improve `/agenda_remove` autocomplete labels for long agenda items.
+- [ ] T042 Add a manual Discord smoke-test section to README, including abuse safety cases.
+- [ ] T043 Document an emergency stop path for public posting.
+- [ ] T044 Add a release checklist for local run, test run, Discord smoke test, safety smoke test, and log review.
 
 ## Dependencies
 
-- T003 before tests in T016-T020 and T025-T026.
+- T003 before tests in T017-T021, T028-T029, and T038-T039.
 - T006 before T007-T010.
 - T011 before T012-T015.
-- T016-T020 before deeper reminder hardening in T022-T026.
-- T024 before finalizing T025 expectations.
+- T017-T021 before deeper reminder hardening in T023-T029.
+- T019-T020 before T030-T039.
+- T027 before finalizing T028 expectations.
 
 ## MVP Completion Target
 

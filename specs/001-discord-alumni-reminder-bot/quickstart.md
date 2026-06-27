@@ -30,6 +30,7 @@
    ALUMNI_ROLE_ID=
    TIMEZONE=America/New_York
    EVENT_NAME_FILTER=Alumni Association Monthly Meeting
+   REMINDERS_ENABLED=true
    ```
 
 5. Run the bot:
@@ -72,3 +73,16 @@
 - Confirm the reminder flag has not already been marked sent.
 - Confirm `ANNOUNCEMENT_CHANNEL_ID` points to a channel where the bot can send messages.
 - Confirm the bot can mention the configured alumni role.
+
+### Emergency Stop For Public Posting
+
+- Stop the bot process to immediately prevent all future public posts.
+- Remove or restrict the bot's Send Messages permission in the announcement channel if the process cannot be reached.
+- Set `REMINDERS_ENABLED=false` and restart the bot to keep the process running while skipping public reminder posts.
+
+### Abuse Safety Smoke Test
+
+- Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown.
+- Confirm `/agenda` displays the item without pinging anyone.
+- Confirm reminder output either sanitizes the item safely or truncates it while preserving the meeting time and Discord event link.
+- Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.

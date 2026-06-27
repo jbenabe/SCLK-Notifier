@@ -17,24 +17,16 @@
 
 - Discord remains source of truth: PASS
 - Member commands hide IDs and technical details: PASS
+- Bot-induced spam prevention is mandatory: NEEDS WORK
 - Reminder idempotency is required and already partially modeled: PASS WITH WORK
 - Admin diagnostics are currently too thin when zero events match: NEEDS WORK
 - Small local runtime remains intact: PASS
 
 ## Proposed Architecture
 
-Keep the MVP single-process, but separate responsibilities so behavior can be tested without a live Discord connection:
+Keep the MVP single-process for this hardening pass. `bot.py` remains the implementation file, with focused helper functions for configuration, persistence, event sync diagnostics, interaction responses, agenda safety, reminder composition, and abuse logging.
 
-- `config.py`: Environment loading and validation.
-- `db.py`: SQLite connection, schema, migrations, and repository functions.
-- `events.py`: Event eligibility, event link creation, event row formatting, sync result modeling.
-- `agenda.py`: Agenda validation and agenda item operations.
-- `reminders.py`: Reminder window decisions, message composition, idempotent mark-sent flow.
-- `discord_bot.py`: Discord client, loops, commands, interaction acknowledgement, Discord API calls.
-- `bot.py`: Minimal entrypoint that initializes DB, loads config, and runs the bot.
-- `tests/`: Unit tests for config, event matching, agenda validation, reminder idempotency, and command-safe response decisions where practical.
-
-This decomposition is not required all at once; implement it in slices that preserve working behavior after each step.
+Extraction into modules is deferred until tests or maintenance pressure justify it. Avoid introducing broad architecture churn while the app is still a small, single-server Discord bot.
 
 ## Phase 0 - Baseline And Safety
 
@@ -70,17 +62,19 @@ Acceptance target:
 
 - An admin can distinguish "no scheduled events", "events exist but filter mismatch", and "bot cannot fetch events" from command output.
 
-## Phase 3 - Testable Core Logic
+## Phase 3 - Testable Core Logic In Place
 
-1. Move pure functions and database operations out of Discord command handlers.
+1. Keep pure helpers near the existing command handlers.
 2. Add tests for:
    - Config validation.
    - Case-insensitive event name matching.
    - Status/time eligibility.
    - Agenda validation limits.
+   - Mention neutralization and public output truncation.
+   - Member write cooldowns and agenda quotas.
    - Reminder due/not-due decisions.
    - Reminder mark-sent idempotency.
-3. Use temporary SQLite databases in tests rather than the production `alumni_bot.db`.
+3. Use ignored SQLite scratch databases in tests rather than the production `alumni_bot.db`.
 
 Acceptance target:
 
@@ -90,8 +84,10 @@ Acceptance target:
 
 1. Re-check event state immediately before sending each reminder.
 2. Mark reminders sent only after Discord confirms the message was posted.
-3. Avoid sending both 7-day and 1-hour reminders back-to-back if the event is first discovered inside the 1-hour window unless that behavior is explicitly accepted.
-4. Add admin-visible reset semantics:
+3. Enforce a maximum public send budget per event and reminder type.
+4. Fail closed and log/admin-report when reminder state, database state, or Discord send state is ambiguous.
+5. Avoid sending both 7-day and 1-hour reminders back-to-back if the event is first discovered inside the 1-hour window unless that behavior is explicitly accepted.
+6. Add admin-visible reset semantics:
    - Reset both flags by default.
    - Optionally reset only one reminder type later if needed.
 
@@ -99,12 +95,28 @@ Acceptance target:
 
 - Repeated reminder checks and bot restarts cannot duplicate already-sent reminders.
 
-## Phase 5 - Operator Polish
+## Phase 5 - Abuse Controls And Output Safety
+
+1. Add per-user `/agenda_add` cooldowns.
+2. Add per-user/per-event and total per-event agenda quotas.
+3. Add a temporary cooldown after repeated rejected member write attempts.
+4. Sanitize all user-submitted agenda text before display in commands or reminders.
+5. Neutralize Discord mentions, channel references, and deceptive markdown in displayed user text.
+6. Cap public reminder message length and truncate agenda content safely with a pointer to `/agenda`.
+7. Log rate-limit hits, cooldowns, denied permissions, agenda removals, reminder sends, and send failures without exposing secrets.
+8. Add `REMINDERS_ENABLED=false` as an emergency stop for public reminder posts.
+
+Acceptance target:
+
+- A compromised member account cannot make the bot ping members or spam public channels through repeated member commands.
+
+## Phase 6 - Operator Polish
 
 1. Improve README setup, permissions, and troubleshooting sections.
 2. Add a local smoke test checklist for real Discord verification.
-3. Add deployment notes for always-on hosting once local operation is reliable.
-4. Consider structured logging only after the MVP flows are stable.
+3. Document an emergency stop path for public posting, including stopping the process and any config flag added for reminder sends.
+4. Add deployment notes for always-on hosting once local operation is reliable.
+5. Consider structured logging only after the MVP flows are stable.
 
 ## Risks And Mitigations
 
@@ -113,11 +125,15 @@ Acceptance target:
 - **Refactor regression**: Extract logic behind tests before changing command behavior deeply.
 - **SQLite schema drift**: Keep idempotent migrations and never destructively alter existing local data without a migration note.
 - **Reminder duplicates after event edits**: Treat Discord event ID as stable identity and require explicit admin reset if reminder flags should be reopened.
+- **Compromised member account spam**: Keep member responses ephemeral, enforce cooldowns/quotas, and never allow user text to create pings.
+- **Oversized agenda payloads**: Cap public reminder output and truncate agenda lines safely.
 
 ## Verification Strategy
 
 - Unit tests for pure logic and database repository behavior.
+- Unit tests for mention neutralization, member write cooldowns, agenda quotas, rejected-write cooldowns, and public output truncation.
 - Manual Discord smoke test for slash command registration and live Scheduled Event fetch.
+- Manual Discord smoke test with agenda text containing `@everyone`, `@here`, role mentions, user mentions, channel mentions, links, and markdown.
 - Manual reminder dry run using a near-future test event in a private/admin channel.
 - Log review after each smoke test to confirm no unhandled Discord exceptions.
 
@@ -126,5 +142,7 @@ Acceptance target:
 - Member commands work with and without a matching event.
 - Admin commands explain sync state clearly.
 - Reminder logic is covered by local tests and remains idempotent.
+- Member write commands are covered by abuse-control tests and cannot create public spam.
+- User-submitted agenda text is sanitized in all display paths.
 - README and quickstart accurately describe setup and troubleshooting.
 - The bot can run locally for one test event through both reminder windows without duplicate sends.
