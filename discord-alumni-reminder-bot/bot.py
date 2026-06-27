@@ -47,7 +47,6 @@ class Config:
     alumni_role_id: int
     timezone_name: str
     timezone: ZoneInfo
-    event_name_filter: Optional[str]
     reminders_enabled: bool
 
 
@@ -102,7 +101,6 @@ def load_config() -> Config:
             alumni_role_id=int(os.environ["ALUMNI_ROLE_ID"]),
             timezone_name=timezone_name,
             timezone=bot_timezone,
-            event_name_filter=os.getenv("EVENT_NAME_FILTER", "").strip() or None,
             reminders_enabled=reminders_enabled,
         )
     except ValueError as exc:
@@ -819,10 +817,6 @@ class AlumniReminderBot(commands.Bot):
         return SyncResult(len(scheduled_events), matching_events, diagnostics, cached_count=len(cached_events))
 
     async def get_next_event_with_sync(self) -> Optional[sqlite3.Row]:
-        event = get_next_tracked_event()
-        if event:
-            return event
-
         await self.sync_events()
         return get_next_tracked_event()
 
@@ -1077,6 +1071,7 @@ async def event_check_access(interaction: discord.Interaction, event: str) -> No
         return
 
     await defer_ephemeral(interaction)
+    await bot.sync_events()
     event_id = parse_discord_event_id(event)
     if event_id is None:
         await send_ephemeral(
@@ -1189,7 +1184,8 @@ async def event_reset_reminders(interaction: discord.Interaction, meeting: Optio
         return
 
     await defer_ephemeral(interaction)
-    event = get_tracked_event(meeting) if meeting else await bot.get_next_event_with_sync()
+    await bot.sync_events()
+    event = get_tracked_event(meeting) if meeting else get_next_tracked_event()
     if event is None:
         await send_ephemeral(
             interaction,
@@ -1233,7 +1229,8 @@ async def event_test_reminder(
         return
 
     await defer_ephemeral(interaction)
-    event = get_tracked_event(meeting) if meeting else await bot.get_next_event_with_sync()
+    await bot.sync_events()
+    event = get_tracked_event(meeting) if meeting else get_next_tracked_event()
     if event is None:
         await send_ephemeral(
             interaction,
@@ -1309,6 +1306,8 @@ async def agenda_remove(interaction: discord.Interaction, agenda_item: int) -> N
     if not await require_manage_guild(interaction):
         return
 
+    await defer_ephemeral(interaction)
+    await bot.sync_events()
     if remove_agenda_item(agenda_item):
         logger.info("User %s removed agenda item %s.", interaction.user.id, agenda_item)
         log_abuse_event("agenda_removed", interaction.user.id, details=f"agenda_item_id={agenda_item}")

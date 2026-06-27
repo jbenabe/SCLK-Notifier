@@ -81,7 +81,7 @@ GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
 TIMEZONE=America/New_York
-EVENT_NAME_FILTER=Alumni Association Monthly Meeting
+DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
 ```
 
@@ -92,7 +92,7 @@ Field meanings:
 - `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
 - `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
 - `TIMEZONE`: Default timezone for readable admin labels.
-- `EVENT_NAME_FILTER`: Optional legacy setting. The bot now tracks any upcoming scheduled or active Discord event in the configured server.
+- `DISCORD_BOT_PERMISSIONS`: Bot invite permission integer. Use `8462797117848576` when regenerating the OAuth2 invite URL.
 - `REMINDERS_ENABLED`: Optional emergency stop for public reminder posting. Defaults to `true`; set to `false` and restart the bot to prevent reminder posts.
 
 Keep `.env` private. Do not commit it.
@@ -124,7 +124,8 @@ Member-submitted agenda text is displayed with Discord mentions and markdown neu
 7. Select scopes:
    - `bot`
    - `applications.commands`
-8. Select the bot permissions listed above.
+8. Use this bot permissions integer:
+   - `8462797117848576`
 9. Open the generated URL and invite the bot to your server.
 
 ## Copy Discord IDs
@@ -191,7 +192,7 @@ The bot creates `alumni_bot.db` automatically the first time it starts.
 
 The bot syncs Discord Scheduled Events every 5 minutes and checks reminders every 60 seconds.
 
-- It tracks scheduled or active Discord events in the configured server.
+- It syncs before slash command responses and tracks any upcoming scheduled or active Discord event in the configured server.
 - It sends a 7-day reminder when the event is 7 days away or less.
 - It sends a 1-day reminder when the event is 1 day away or less.
 - It sends a day-of reminder around 4:00 PM in `TIMEZONE` if the event has not started.

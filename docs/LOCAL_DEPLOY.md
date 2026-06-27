@@ -54,6 +54,7 @@ This guide gets SCLK Notifier running from a Windows PC. It is the MVP deploymen
    ANNOUNCEMENT_CHANNEL_ID=
    ALUMNI_ROLE_ID=
    TIMEZONE=America/New_York
+   DISCORD_BOT_PERMISSIONS=8462797117848576
    REMINDERS_ENABLED=true
    ```
 
@@ -132,7 +133,7 @@ Use this when new code has been merged or you want to test a branch.
    python -m unittest discover -s tests
    ```
 
-6. Confirm `.env` still has the correct Discord values and `REMINDERS_ENABLED=true`.
+6. Confirm `.env` still has the correct Discord values, `DISCORD_BOT_PERMISSIONS=8462797117848576`, and `REMINDERS_ENABLED=true`.
 
 7. Restart the bot:
 

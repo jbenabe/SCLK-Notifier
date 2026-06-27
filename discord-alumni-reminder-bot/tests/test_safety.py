@@ -14,7 +14,6 @@ os.environ.setdefault("GUILD_ID", "123")
 os.environ.setdefault("ANNOUNCEMENT_CHANNEL_ID", "456")
 os.environ.setdefault("ALUMNI_ROLE_ID", "789")
 os.environ.setdefault("TIMEZONE", "America/New_York")
-os.environ.setdefault("EVENT_NAME_FILTER", "Alumni")
 
 import bot  # noqa: E402
 
