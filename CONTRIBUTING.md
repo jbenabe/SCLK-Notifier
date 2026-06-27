@@ -16,7 +16,7 @@ Thanks for helping with SCLK Notifier. The goal is to keep this bot small, relia
 git clone https://github.com/award73/SCLK-Notifier.git
 cd SCLK-Notifier\discord-alumni-reminder-bot
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
@@ -37,6 +37,13 @@ From inside `discord-alumni-reminder-bot/` with the venv activated:
 ```powershell
 python -m py_compile bot.py
 python -m unittest discover -s tests
+```
+
+If PowerShell blocks activation because of execution policy, enable it only for the current terminal session:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
 ```
 
 ## Branches

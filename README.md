@@ -16,7 +16,7 @@ Short version for an existing checkout on Windows:
 
 ```powershell
 cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m unittest discover -s tests
 python bot.py

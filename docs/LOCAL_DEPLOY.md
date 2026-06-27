@@ -24,7 +24,14 @@ This guide gets SCLK Notifier running from a Windows PC. It is the MVP deploymen
 
    ```powershell
    python -m venv .venv
-   .venv\Scripts\activate
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+   If PowerShell blocks activation because of execution policy, enable it only for the current terminal session:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   .\.venv\Scripts\Activate.ps1
    ```
 
 4. Install dependencies:
@@ -108,7 +115,7 @@ Use this when new code has been merged or you want to test a branch.
 
    ```powershell
    cd discord-alumni-reminder-bot
-   .venv\Scripts\activate
+   .\.venv\Scripts\Activate.ps1
    ```
 
 4. Update dependencies:
@@ -170,7 +177,7 @@ Use this if the latest code fails and you need to test a known-good commit.
 
    ```powershell
    cd discord-alumni-reminder-bot
-   .venv\Scripts\activate
+   .\.venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    python -m unittest discover -s tests
    python bot.py

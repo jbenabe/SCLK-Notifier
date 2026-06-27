@@ -154,7 +154,14 @@ python -m venv .venv
 Activate on Windows:
 
 ```powershell
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation because of execution policy, enable it only for the current terminal session:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
 ```
 
 Activate on Mac/Linux:
