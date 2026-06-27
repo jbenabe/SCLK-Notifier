@@ -132,18 +132,6 @@ class SafetyTestCase(unittest.TestCase):
 
         self.assertIsNone(bot.event_rejection_reason(event, bot.config))
 
-    def test_parse_discord_event_id_from_link_or_id(self) -> None:
-        self.assertEqual(
-            bot.parse_discord_event_id("https://discord.com/events/1018558247420047522/1511571175204065330"),
-            1511571175204065330,
-        )
-        self.assertEqual(
-            bot.parse_discord_event_id("https://discordapp.com/events/1018558247420047522/1511571175204065330"),
-            1511571175204065330,
-        )
-        self.assertEqual(bot.parse_discord_event_id("1511571175204065330"), 1511571175204065330)
-        self.assertIsNone(bot.parse_discord_event_id("not an event"))
-
 
 if __name__ == "__main__":
     unittest.main()

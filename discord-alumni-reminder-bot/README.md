@@ -62,11 +62,10 @@ Admin commands:
 
 | Command | Description |
 | --- | --- |
-| `/event_sync` | Fetches matching Discord Scheduled Events and tracks them locally. |
-| `/event_check_access` | Checks whether the bot can see a specific Discord event link or ID. |
+| `/event_sync` | Fetches visible Discord Scheduled Events and tracks them locally. |
 | `/event_list` | Shows upcoming tracked events, reminder status, agenda count, event links, and admin-only technical details. |
 | `/event_reset_reminders` | Resets reminder flags for the selected meeting, or the next meeting by default. |
-| `/event_test_reminder` | Previews a reminder safely, or posts a test reminder mentioning only the admin who ran it. |
+| `/test_notify` | Posts a production-shaped test notification mentioning only the admin who ran it. |
 | `/agenda_remove` | Removes an agenda item. Uses autocomplete for agenda item choices where available. |
 
 Use `/event_reset_reminders` if an event time changes and you want the bot to be able to send reminders again.
@@ -210,21 +209,15 @@ Reminder messages include:
 - Current agenda items, if any
 - RSVP prompt for the native Discord event
 
-## Safe Reminder Testing
+## Safe Notification Testing
 
-Admins can test reminder content without pinging the alumni role:
-
-```text
-/event_test_reminder reminder_type:"7-day reminder"
-```
-
-By default this returns an ephemeral preview only. To post a real test message to the announcement channel while mentioning only yourself, run:
+Admins can post a test notification without pinging the alumni role:
 
 ```text
-/event_test_reminder reminder_type:"7-day reminder" send_to_channel:true
+/test_notify
 ```
 
-Use the test command before resetting real reminder flags or waiting for live reminder windows.
+This posts the same production-shaped notification body to the announcement channel, but mentions only the admin who ran the command.
 
 ## Agenda Behavior
 
@@ -276,14 +269,6 @@ If `/event_sync` finds no upcoming events, check:
 
 If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
 
-Admins can check a specific event link with:
-
-```text
-/event_check_access event:"https://discord.com/events/server-id/event-id"
-```
-
-If Discord reports `Missing Access`, the bot can see the server but cannot see that event. Most often, the event is attached to a channel the bot role cannot view. Give the bot role access to that channel, or recreate the event in a channel the bot can view, then run `/event_sync`.
-
 If a slash command times out or Discord reports `Unknown interaction`, the command likely took too long before acknowledgement. Slow commands now defer ephemerally before fetching Discord data; check logs for Discord API errors around the command time.
 
 Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does not use Discord voice.
@@ -293,13 +278,11 @@ Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does
 1. Start the bot and confirm slash command sync appears in the logs.
 2. Create a future Discord Scheduled Event in the configured server.
 3. Run `/event_sync` as an admin and confirm the event is tracked.
-4. If sync does not find it, run `/event_check_access event:"your event link"`.
-5. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
-6. Run `/event_test_reminder reminder_type:"7-day reminder"` and confirm the preview looks right.
-7. Run `/event_test_reminder reminder_type:"7-day reminder" send_to_channel:true` and confirm it mentions only you.
-8. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
-9. Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
-10. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
+4. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
+5. Run `/test_notify` and confirm the announcement channel message mentions only you.
+6. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+7. Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
+8. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
 
 ## Hosting Notes
 

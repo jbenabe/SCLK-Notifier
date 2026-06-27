@@ -82,13 +82,11 @@ In Discord:
 1. Create a future native Discord Scheduled Event.
 2. As a Manage Server admin, run `/event_sync`.
 3. Run `/event_list`.
-4. If sync does not find the event, run `/event_check_access event:"your event link"`.
-5. Run `/next_meeting`.
-6. Run `/event_test_reminder reminder_type:"7-day reminder"`.
-7. Run `/event_test_reminder reminder_type:"7-day reminder" send_to_channel:true` and confirm the test message mentions only you.
-8. Run `/agenda_add item:"Test agenda item"`.
-9. Run `/agenda`.
-10. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+4. Run `/next_meeting`.
+5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning only you.
+6. Run `/agenda_add item:"Test agenda item"`.
+7. Run `/agenda`.
+8. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
 
 ## Redeploy Existing Local Bot
 

@@ -29,7 +29,6 @@ DIAGNOSTIC_EVENT_LIMIT = 5
 DAY_OF_REMINDER_LOCAL_TIME = time(hour=16, minute=0)
 
 MENTION_PATTERN = re.compile(r"<(@!?\d+|@&\d+|#\d+)>")
-EVENT_LINK_ID_PATTERN = re.compile(r"(?:discord(?:app)?\.com/events/\d+/)?(\d{15,25})")
 MARKDOWN_CHARS = "\\*_~`>|"
 
 logging.basicConfig(
@@ -231,13 +230,6 @@ def event_rejection_reason(event: discord.ScheduledEvent, config: Config) -> Opt
 
 def event_link(guild_id: int, discord_event_id: str) -> str:
     return f"https://discord.com/events/{guild_id}/{discord_event_id}"
-
-
-def parse_discord_event_id(value: str) -> Optional[int]:
-    match = EVENT_LINK_ID_PATTERN.search(value.strip())
-    if match is None:
-        return None
-    return int(match.group(1))
 
 
 def upsert_tracked_event(event: discord.ScheduledEvent) -> None:
@@ -576,6 +568,16 @@ def reminder_label(reminder_type: str) -> str:
         "day_of": "day-of",
     }
     return labels.get(reminder_type, reminder_type)
+
+
+def test_notification_type(event: sqlite3.Row) -> str:
+    start_time = datetime_from_db(event["start_time_utc"])
+    now = utc_now()
+    if day_of_reminder_due(now, start_time, config.timezone):
+        return "day_of"
+    if now >= start_time - timedelta(days=1):
+        return "one_day"
+    return "seven_day"
 
 
 def compose_reminder_lines(
@@ -1064,68 +1066,6 @@ async def event_sync(interaction: discord.Interaction) -> None:
     await send_ephemeral(interaction, "\n".join(lines))
 
 
-@bot.tree.command(name="event_check_access", description="Check whether the bot can see a Discord event link or ID.")
-@app_commands.describe(event="Discord event link or event ID")
-async def event_check_access(interaction: discord.Interaction, event: str) -> None:
-    if not await require_manage_guild(interaction):
-        return
-
-    await defer_ephemeral(interaction)
-    await bot.sync_events()
-    event_id = parse_discord_event_id(event)
-    if event_id is None:
-        await send_ephemeral(
-            interaction,
-            "I could not find a Discord event ID in that value. Paste the full event link or the event ID.",
-        )
-        return
-
-    guild = await bot.get_configured_guild()
-    if guild is None:
-        await send_ephemeral(interaction, "I could not access the configured Discord server.")
-        return
-
-    try:
-        scheduled_event = await guild.fetch_scheduled_event(event_id, with_counts=True)
-    except discord.Forbidden:
-        await send_ephemeral(
-            interaction,
-            "I found that event ID, but Discord says the bot is missing access.\n\n"
-            "Most likely fix: give the bot role permission to view the channel attached to the event, "
-            "or recreate the event in a channel the bot can view. Then run /event_sync again.",
-        )
-        return
-    except discord.NotFound:
-        await send_ephemeral(
-            interaction,
-            "Discord says that event was not found for this server. Check that the event link belongs to this server.",
-        )
-        return
-    except discord.DiscordException:
-        logger.exception("Could not check scheduled event access for event %s.", event_id)
-        await send_ephemeral(interaction, "Discord returned an error while checking that event. Check the bot logs.")
-        return
-
-    rejection_reason = event_rejection_reason(scheduled_event, config)
-    if rejection_reason:
-        await send_ephemeral(
-            interaction,
-            f"I can access that event, but I will not track it yet: {rejection_reason}.\n\n"
-            f"Event: {sanitize_display_text(scheduled_event.name)}\n"
-            f"Time: {to_discord_timestamp(scheduled_event.start_time) if scheduled_event.start_time else 'No start time'}",
-        )
-        return
-
-    upsert_tracked_event(scheduled_event)
-    await send_ephemeral(
-        interaction,
-        "I can access that event and it is now tracked.\n\n"
-        f"Event: {sanitize_display_text(scheduled_event.name)}\n"
-        f"Time: {to_discord_timestamp(scheduled_event.start_time)}\n"
-        f"Link: {event_link(config.guild_id, str(scheduled_event.id))}",
-    )
-
-
 @bot.tree.command(name="event_list", description="List tracked alumni events.")
 async def event_list(interaction: discord.Interaction) -> None:
     if not await require_manage_guild(interaction):
@@ -1205,26 +1145,10 @@ async def event_reset_reminders(interaction: discord.Interaction, meeting: Optio
         await send_ephemeral(interaction, "I could not reset reminders for that meeting.")
 
 
-@bot.tree.command(name="event_test_reminder", description="Preview a reminder without pinging the alumni role.")
-@app_commands.describe(
-    reminder_type="Reminder message to preview",
-    send_to_channel="Post a test message to the announcement channel mentioning only you",
-    meeting="Optional meeting; defaults to the next upcoming alumni meeting",
-)
-@app_commands.choices(
-    reminder_type=[
-        app_commands.Choice(name="7-day reminder", value="seven_day"),
-        app_commands.Choice(name="1-day reminder", value="one_day"),
-        app_commands.Choice(name="Day-of reminder", value="day_of"),
-    ]
-)
+@bot.tree.command(name="test_notify", description="Post a test notification for an alumni meeting.")
+@app_commands.describe(meeting="Optional meeting; defaults to the next upcoming alumni meeting")
 @app_commands.autocomplete(meeting=event_autocomplete)
-async def event_test_reminder(
-    interaction: discord.Interaction,
-    reminder_type: app_commands.Choice[str],
-    send_to_channel: bool = False,
-    meeting: Optional[str] = None,
-) -> None:
+async def test_notify(interaction: discord.Interaction, meeting: Optional[str] = None) -> None:
     if not await require_manage_guild(interaction):
         return
 
@@ -1238,45 +1162,32 @@ async def event_test_reminder(
         )
         return
 
-    if send_to_channel:
-        channel = await bot.get_announcement_channel()
-        if channel is None:
-            await send_ephemeral(interaction, "I could not access the configured announcement channel.")
-            return
-
-        lines = compose_reminder_lines(event, config, reminder_type.value, interaction.user.mention)
-        try:
-            await channel.send(
-                truncate_public_message(lines),
-                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
-            )
-        except discord.DiscordException:
-            logger.exception("Failed to send test reminder for event %s.", event["discord_event_id"])
-            await send_ephemeral(interaction, "I could not send the test reminder to the announcement channel.")
-            return
-
-        log_abuse_event(
-            "test_reminder_sent",
-            interaction.user.id,
-            event["discord_event_id"],
-            reminder_type.value,
-        )
-        await send_ephemeral(
-            interaction,
-            f"Sent a {reminder_label(reminder_type.value)} test reminder to the announcement channel mentioning only you.",
-        )
+    channel = await bot.get_announcement_channel()
+    if channel is None:
+        await send_ephemeral(interaction, "I could not access the configured announcement channel.")
         return
 
-    preview_lines = compose_reminder_lines(
-        event,
-        config,
-        reminder_type.value,
-        f"Test reminder for {sanitize_display_text(interaction.user.display_name)}:",
+    reminder_type = test_notification_type(event)
+    lines = compose_reminder_lines(event, config, reminder_type, interaction.user.mention)
+    try:
+        await channel.send(
+            truncate_public_message(lines),
+            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+        )
+    except discord.DiscordException:
+        logger.exception("Failed to send test notification for event %s.", event["discord_event_id"])
+        await send_ephemeral(interaction, "I could not send the test notification to the announcement channel.")
+        return
+
+    log_abuse_event(
+        "test_notification_sent",
+        interaction.user.id,
+        event["discord_event_id"],
+        reminder_type,
     )
     await send_ephemeral(
         interaction,
-        "Reminder preview. Nothing was posted publicly and the alumni role was not mentioned.\n\n"
-        + truncate_public_message(preview_lines),
+        f"Sent a {reminder_label(reminder_type)} test notification to the announcement channel mentioning only you.",
     )
 
 
