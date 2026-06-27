@@ -12,7 +12,7 @@
 - The runtime log shows:
   - Bot authenticated successfully.
   - Seven slash commands synced to the configured guild.
-  - Event sync found zero matching events.
+  - Event sync found zero visible events.
   - `/next_meeting` later failed with Discord `404 Unknown interaction`.
 
 ## Key Decisions

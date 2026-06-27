@@ -29,7 +29,6 @@
    ANNOUNCEMENT_CHANNEL_ID=
    ALUMNI_ROLE_ID=
    TIMEZONE=America/New_York
-   EVENT_NAME_FILTER=Alumni Association Monthly Meeting
    REMINDERS_ENABLED=true
    ```
 
@@ -43,12 +42,11 @@
 
 1. Confirm the bot logs in and reports slash command sync.
 2. Create a future Discord Scheduled Event in the configured guild.
-3. Ensure the event name contains the exact configured `EVENT_NAME_FILTER` text, ignoring case.
-4. Run `/event_sync` as a Manage Server admin.
-5. Run `/event_list` and confirm the event appears.
-6. Run `/next_meeting` as a normal member.
-7. Run `/agenda_add item:"Test agenda item"`.
-8. Run `/agenda` and confirm the item appears.
+3. Run `/event_sync` as a Manage Server admin.
+4. Run `/event_list` and confirm the event appears.
+5. Run `/next_meeting` as a normal member.
+6. Run `/agenda_add item:"Test agenda item"`.
+7. Run `/agenda` and confirm the item appears.
 
 ## Troubleshooting Checklist
 
@@ -57,7 +55,6 @@
 - Confirm the event is in the same server as `GUILD_ID`.
 - Confirm the event is scheduled for the future.
 - Confirm the event status is scheduled or active.
-- Confirm the event name contains `EVENT_NAME_FILTER`.
 - Confirm the bot has access to view/fetch server scheduled events.
 
 ### Command Fails With `Unknown interaction`

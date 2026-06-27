@@ -46,7 +46,7 @@ class Config:
     alumni_role_id: int
     timezone_name: str
     timezone: ZoneInfo
-    event_name_filter: str
+    event_name_filter: Optional[str]
     reminders_enabled: bool
 
 
@@ -80,7 +80,6 @@ def load_config() -> Config:
         "ANNOUNCEMENT_CHANNEL_ID",
         "ALUMNI_ROLE_ID",
         "TIMEZONE",
-        "EVENT_NAME_FILTER",
     ]
     missing = [name for name in required_vars if not os.getenv(name)]
     if missing:
@@ -102,7 +101,7 @@ def load_config() -> Config:
             alumni_role_id=int(os.environ["ALUMNI_ROLE_ID"]),
             timezone_name=timezone_name,
             timezone=bot_timezone,
-            event_name_filter=os.environ["EVENT_NAME_FILTER"].strip(),
+            event_name_filter=os.getenv("EVENT_NAME_FILTER", "").strip() or None,
             reminders_enabled=reminders_enabled,
         )
     except ValueError as exc:
@@ -227,9 +226,6 @@ def event_rejection_reason(event: discord.ScheduledEvent, config: Config) -> Opt
 
     if event.start_time.astimezone(timezone.utc) <= utc_now():
         return "event already started"
-
-    if config.event_name_filter.lower() not in event.name.lower():
-        return "name does not match filter"
 
     return None
 
@@ -670,17 +666,14 @@ def describe_sync_result(result: SyncResult, config: Config) -> str:
         return result.error
 
     lines = [
-        "No matching Discord events found.",
-        "",
-        "I am looking for events whose name contains:",
-        f'"{config.event_name_filter}"',
+        "No upcoming Discord events found.",
         "",
         f"Discord returned {result.fetched_count} scheduled event{'s' if result.fetched_count != 1 else ''}.",
     ]
     if result.cached_count != result.fetched_count:
         lines.append(f"Cached scheduled events visible to the bot: {result.cached_count}.")
     if result.diagnostics:
-        lines.extend(["", "Closest non-matching events I inspected:"])
+        lines.extend(["", "Events I inspected but did not track:"])
         for diagnostic in result.diagnostics[:DIAGNOSTIC_EVENT_LIMIT]:
             start_label = "no start time"
             if diagnostic.start_time is not None:
@@ -693,7 +686,7 @@ def describe_sync_result(result: SyncResult, config: Config) -> str:
     lines.extend(
         [
             "",
-            "Check the event name, event status, event time, and bot access to server scheduled events.",
+            "Check that the event is scheduled in the future and visible to the bot.",
         ]
     )
     return "\n".join(lines)
@@ -811,7 +804,7 @@ class AlumniReminderBot(commands.Bot):
         mark_unseen_events_inactive(seen_event_ids)
         mark_started_events_inactive()
         logger.info(
-            "Event sync complete. Fetched %s events and found %s matching events.",
+            "Event sync complete. Fetched %s events and found %s upcoming events.",
             len(scheduled_events),
             len(matching_events),
         )
@@ -938,11 +931,11 @@ async def agenda_add(interaction: discord.Interaction, item: str) -> None:
 
     event = await bot.get_next_event_with_sync()
     if event is None:
-        record_rejected_write(interaction.user.id, None, "no upcoming matching event")
+        record_rejected_write(interaction.user.id, None, "no upcoming event")
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Alumni Association meeting to attach this agenda item to.\n\n"
-            "An admin may need to run:\n/event_sync",
+            "I could not find an upcoming Discord event to attach this agenda item to.\n\n"
+            "An admin can create a Discord event, then run:\n/event_sync",
         )
         return
 
@@ -985,8 +978,8 @@ async def agenda(interaction: discord.Interaction) -> None:
     if event is None:
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Alumni Association meeting.\n\n"
-            "An admin should check that the Discord event exists, then run:\n/event_sync",
+            "I could not find an upcoming Discord event.\n\n"
+            "An admin can create a Discord event, then run:\n/event_sync",
         )
         return
 
@@ -996,7 +989,7 @@ async def agenda(interaction: discord.Interaction) -> None:
         body = "\n".join(agenda_lines)
     else:
         body = (
-            f"No agenda items have been added yet for the next {sanitize_display_text(config.event_name_filter)}.\n\n"
+            "No agenda items have been added yet for the next event.\n\n"
             'Add one with:\n/agenda_add item:"Your topic here"'
         )
 
@@ -1015,8 +1008,8 @@ async def next_meeting(interaction: discord.Interaction) -> None:
     if event is None:
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Alumni Association meeting.\n\n"
-            "An admin should check that the Discord event exists, then run:\n/event_sync",
+            "I could not find an upcoming Discord event.\n\n"
+            "An admin can create a Discord event, then run:\n/event_sync",
         )
         return
 
@@ -1061,7 +1054,7 @@ async def event_sync(interaction: discord.Interaction) -> None:
     lines = [
         "Event sync complete.",
         "",
-        f"Found {result.matched_count} matching event{'s' if result.matched_count != 1 else ''}:",
+        f"Found {result.matched_count} upcoming event{'s' if result.matched_count != 1 else ''}:",
     ]
     for event in result.matched_events:
         lines.append(f"{sanitize_display_text(event.name)} - {to_discord_timestamp(event.start_time)}")
@@ -1131,7 +1124,7 @@ async def event_reset_reminders(interaction: discord.Interaction, meeting: Optio
     if event is None:
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Alumni Association meeting to reset.",
+            "I could not find an upcoming Discord event to reset.",
         )
         return
 
@@ -1175,7 +1168,7 @@ async def event_test_reminder(
     if event is None:
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Alumni Association meeting to preview.",
+            "I could not find an upcoming Discord event to preview.",
         )
         return
 

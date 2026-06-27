@@ -19,6 +19,13 @@ os.environ.setdefault("EVENT_NAME_FILTER", "Alumni")
 import bot  # noqa: E402
 
 
+class FakeScheduledEvent:
+    def __init__(self, name: str, start_time, status_name: str = "scheduled") -> None:
+        self.name = name
+        self.start_time = start_time
+        self.status = type("Status", (), {"name": status_name})()
+
+
 class SafetyTestCase(unittest.TestCase):
     def setUp(self) -> None:
         scratch_dir = PROJECT_DIR / ".test-tmp"
@@ -120,6 +127,11 @@ class SafetyTestCase(unittest.TestCase):
         self.assertFalse(bot.day_of_reminder_due(before_four, event_start, local_tz))
         self.assertTrue(bot.day_of_reminder_due(at_four, event_start, local_tz))
         self.assertFalse(bot.day_of_reminder_due(after_start, event_start, local_tz))
+
+    def test_event_eligibility_does_not_require_name_filter(self) -> None:
+        event = FakeScheduledEvent("Completely Different Event Name", bot.utc_now() + timedelta(days=3))
+
+        self.assertIsNone(bot.event_rejection_reason(event, bot.config))
 
 
 if __name__ == "__main__":

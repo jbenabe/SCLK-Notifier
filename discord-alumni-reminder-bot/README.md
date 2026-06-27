@@ -9,7 +9,7 @@ The bot does not create Discord Events, manage RSVPs, or sync with Google Calend
 ## What It Does
 
 - Reads native Discord Scheduled Events from one configured server
-- Tracks events whose names contain `EVENT_NAME_FILTER`
+- Tracks upcoming scheduled or active Discord events
 - Sends reminders to the configured alumni role 7 days before, 1 day before, and around 4:00 PM local time on the event day
 - Includes the Discord event link in reminder messages
 - Lets members add agenda items without copying IDs
@@ -44,14 +44,13 @@ The bot automatically attaches the agenda item to the next upcoming matching Dis
 Admin commands require the Discord **Manage Server** permission.
 
 1. Create the recurring alumni meeting using Discord's normal Event UI.
-2. Make sure the event name contains the configured `EVENT_NAME_FILTER`.
-3. Run:
+2. Run:
 
 ```text
 /event_sync
 ```
 
-4. Confirm the bot sees the event:
+3. Confirm the bot sees the event:
 
 ```text
 /event_list
@@ -92,7 +91,7 @@ Field meanings:
 - `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
 - `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
 - `TIMEZONE`: Default timezone for readable admin labels.
-- `EVENT_NAME_FILTER`: Case-insensitive text used to identify alumni meeting Discord Events.
+- `EVENT_NAME_FILTER`: Optional legacy setting. The bot now tracks any upcoming scheduled or active Discord event in the configured server.
 - `REMINDERS_ENABLED`: Optional emergency stop for public reminder posting. Defaults to `true`; set to `false` and restart the bot to prevent reminder posts.
 
 Keep `.env` private. Do not commit it.
@@ -191,7 +190,7 @@ The bot creates `alumni_bot.db` automatically the first time it starts.
 
 The bot syncs Discord Scheduled Events every 5 minutes and checks reminders every 60 seconds.
 
-- It tracks scheduled or active Discord events whose names contain `EVENT_NAME_FILTER`.
+- It tracks scheduled or active Discord events in the configured server.
 - It sends a 7-day reminder when the event is 7 days away or less.
 - It sends a 1-day reminder when the event is 1 day away or less.
 - It sends a day-of reminder around 4:00 PM in `TIMEZONE` if the event has not started.
@@ -266,12 +265,11 @@ Then restart the bot.
 
 ## Troubleshooting
 
-If `/event_sync` finds no matching events, check:
+If `/event_sync` finds no upcoming events, check:
 
 - The event is in the configured server.
 - The event is scheduled for the future.
 - The event status is scheduled or active.
-- The event name contains `EVENT_NAME_FILTER`.
 - The bot can view/fetch server scheduled events.
 
 If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
@@ -283,7 +281,7 @@ Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does
 ## Discord Smoke Test
 
 1. Start the bot and confirm slash command sync appears in the logs.
-2. Create a future Discord Scheduled Event whose name contains `EVENT_NAME_FILTER`.
+2. Create a future Discord Scheduled Event in the configured server.
 3. Run `/event_sync` as an admin and confirm the event is tracked.
 4. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
 5. Run `/event_test_reminder reminder_type:"7-day reminder"` and confirm the preview looks right.
