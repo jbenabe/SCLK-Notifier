@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Test and create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: discord-alumni-reminder-bot/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r discord-alumni-reminder-bot/requirements.txt
+
+      - name: Compile bot
+        run: python -m py_compile discord-alumni-reminder-bot/bot.py
+
+      - name: Run tests
+        run: python -m unittest discover -s discord-alumni-reminder-bot/tests
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "$TAG_NAME" \
+            --notes "Automated release for $TAG_NAME. CI passed before this release was created."
