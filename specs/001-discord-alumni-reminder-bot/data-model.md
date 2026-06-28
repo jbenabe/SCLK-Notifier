@@ -47,7 +47,7 @@ Member-submitted agenda entries associated with one tracked Discord event.
 - Active agenda items for a meeting are listed by `created_at_utc ASC`.
 - Agenda additions are allowed only before the linked meeting starts.
 - Agenda text may be stored as submitted for audit, but every display path must render a sanitized version that cannot create Discord mentions or deceptive formatting.
-- Agenda writes are subject to per-user cooldowns, per-user/per-event quotas, and total per-event quotas.
+- Agenda writes are subject to item validation, rejected-write cooldowns, and total per-event quotas.
 
 ## abuse_events
 
@@ -87,8 +87,6 @@ Structured in-memory policy used by agenda and reminder flows.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `agenda_add_cooldown_seconds` | integer | Minimum delay between accepted agenda writes by one user. |
-| `agenda_user_event_quota` | integer | Maximum active agenda items one user may add to one event. |
 | `agenda_event_quota` | integer | Maximum active agenda items allowed for one event. |
 | `rejected_write_cooldown_seconds` | integer | Temporary cooldown after repeated rejected writes. |
 | `public_message_max_chars` | integer | Maximum rendered public reminder length before truncation. |

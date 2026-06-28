@@ -17,9 +17,8 @@ from dotenv import load_dotenv
 
 DB_PATH = Path(__file__).with_name("alumni_bot.db")
 AGENDA_ITEM_LIMIT = 500
-AGENDA_ADD_COOLDOWN_SECONDS = 300
-AGENDA_USER_EVENT_LIMIT = 3
 AGENDA_EVENT_LIMIT = 25
+SQLITE_TIMEOUT_SECONDS = 30
 REJECTED_WRITE_LIMIT = 5
 REJECTED_WRITE_WINDOW_SECONDS = 600
 REJECTED_WRITE_COOLDOWN_SECONDS = 1800
@@ -44,6 +43,7 @@ class Config:
     guild_id: int
     announcement_channel_id: int
     alumni_role_id: int
+    alumni_board_role_id: int
     timezone_name: str
     timezone: ZoneInfo
     reminders_enabled: bool
@@ -78,6 +78,7 @@ def load_config() -> Config:
         "GUILD_ID",
         "ANNOUNCEMENT_CHANNEL_ID",
         "ALUMNI_ROLE_ID",
+        "ALUMNI_BOARD_ROLE_ID",
         "TIMEZONE",
     ]
     missing = [name for name in required_vars if not os.getenv(name)]
@@ -98,21 +99,25 @@ def load_config() -> Config:
             guild_id=int(os.environ["GUILD_ID"]),
             announcement_channel_id=int(os.environ["ANNOUNCEMENT_CHANNEL_ID"]),
             alumni_role_id=int(os.environ["ALUMNI_ROLE_ID"]),
+            alumni_board_role_id=int(os.environ["ALUMNI_BOARD_ROLE_ID"]),
             timezone_name=timezone_name,
             timezone=bot_timezone,
             reminders_enabled=reminders_enabled,
         )
     except ValueError as exc:
-        raise ValueError("GUILD_ID, ANNOUNCEMENT_CHANNEL_ID, and ALUMNI_ROLE_ID must be numeric IDs.") from exc
+        raise ValueError(
+            "GUILD_ID, ANNOUNCEMENT_CHANNEL_ID, ALUMNI_ROLE_ID, and ALUMNI_BOARD_ROLE_ID must be numeric IDs."
+        ) from exc
     except ZoneInfoNotFoundError as exc:
         raise ValueError(f"Invalid TIMEZONE value: {os.environ['TIMEZONE']}") from exc
 
 
 @contextmanager
 def get_db() -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=SQLITE_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
     try:
+        conn.execute(f"PRAGMA busy_timeout = {SQLITE_TIMEOUT_SECONDS * 1000}")
         with conn:
             yield conn
     finally:
@@ -623,6 +628,14 @@ def compose_reminder_lines(
     return lines
 
 
+def role_only_allowed_mentions(role_id: int) -> discord.AllowedMentions:
+    return discord.AllowedMentions(
+        users=False,
+        roles=[discord.Object(id=role_id)],
+        everyone=False,
+    )
+
+
 def day_of_reminder_due(now: datetime, start_time: datetime, bot_timezone: ZoneInfo) -> bool:
     now_local = now.astimezone(bot_timezone)
     start_local = start_time.astimezone(bot_timezone)
@@ -634,18 +647,22 @@ def day_of_reminder_due(now: datetime, start_time: datetime, bot_timezone: ZoneI
     return now_local >= reminder_time and now < start_time
 
 
-def user_can_manage_guild(interaction: discord.Interaction) -> bool:
-    permissions = getattr(interaction.user, "guild_permissions", None)
-    return bool(permissions and permissions.manage_guild)
+def user_has_role(interaction: discord.Interaction, role_id: int) -> bool:
+    roles = getattr(interaction.user, "roles", []) or []
+    return any(getattr(role, "id", None) == role_id for role in roles)
 
 
-async def require_manage_guild(interaction: discord.Interaction) -> bool:
-    if user_can_manage_guild(interaction):
+def user_can_use_elevated_commands(interaction: discord.Interaction) -> bool:
+    return user_has_role(interaction, config.alumni_board_role_id)
+
+
+async def require_alumni_board_role(interaction: discord.Interaction) -> bool:
+    if user_can_use_elevated_commands(interaction):
         return True
 
-    logger.info("Permission denied for user %s on admin command.", interaction.user.id)
-    log_abuse_event("permission_denied", interaction.user.id, details="admin command denied")
-    await send_ephemeral(interaction, "Only server admins can use this command.")
+    logger.info("Permission denied for user %s on elevated command.", interaction.user.id)
+    log_abuse_event("permission_denied", interaction.user.id, details="alumni board command denied")
+    await send_ephemeral(interaction, "Only Alumni Board members can use this command.")
     return False
 
 
@@ -703,15 +720,6 @@ def describe_sync_result(result: SyncResult, config: Config) -> str:
 def agenda_write_rejection_reason(event: sqlite3.Row, user_id: int | str) -> Optional[str]:
     if user_has_rejection_cooldown(user_id):
         return "Too many rejected agenda attempts. Please wait before trying again."
-
-    last_item_time = get_user_last_agenda_item_time(user_id)
-    if last_item_time is not None:
-        cooldown_until = last_item_time + timedelta(seconds=AGENDA_ADD_COOLDOWN_SECONDS)
-        if utc_now() < cooldown_until:
-            return "Please wait a few minutes before adding another agenda item."
-
-    if count_user_agenda_items(event["discord_event_id"], user_id) >= AGENDA_USER_EVENT_LIMIT:
-        return f"You already have {AGENDA_USER_EVENT_LIMIT} agenda items for this meeting."
 
     if count_active_agenda_items(event["discord_event_id"]) >= AGENDA_EVENT_LIMIT:
         return "This meeting agenda is full. Please ask an admin to review existing items."
@@ -851,7 +859,7 @@ class AlumniReminderBot(commands.Bot):
         try:
             await channel.send(
                 truncate_public_message(lines),
-                allowed_mentions=discord.AllowedMentions(roles=True, everyone=False, users=False),
+                allowed_mentions=role_only_allowed_mentions(self.config.alumni_role_id),
             )
             log_abuse_event("reminder_sent", discord_event_id=event["discord_event_id"], details=reminder_type)
             return True
@@ -1030,7 +1038,7 @@ async def next_meeting(interaction: discord.Interaction) -> None:
         '/agenda_add item:"Your topic here"',
     ]
 
-    if user_can_manage_guild(interaction):
+    if user_can_use_elevated_commands(interaction):
         lines.extend(
             [
                 "",
@@ -1046,7 +1054,7 @@ async def next_meeting(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="event_sync", description="Sync native Discord events for alumni reminders.")
 async def event_sync(interaction: discord.Interaction) -> None:
-    if not await require_manage_guild(interaction):
+    if not await require_alumni_board_role(interaction):
         return
 
     await defer_ephemeral(interaction)
@@ -1068,7 +1076,7 @@ async def event_sync(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="event_list", description="List tracked alumni events.")
 async def event_list(interaction: discord.Interaction) -> None:
-    if not await require_manage_guild(interaction):
+    if not await require_alumni_board_role(interaction):
         return
 
     await defer_ephemeral(interaction)
@@ -1120,7 +1128,7 @@ async def event_autocomplete(
 @app_commands.describe(meeting="Optional meeting; defaults to the next upcoming alumni meeting")
 @app_commands.autocomplete(meeting=event_autocomplete)
 async def event_reset_reminders(interaction: discord.Interaction, meeting: Optional[str] = None) -> None:
-    if not await require_manage_guild(interaction):
+    if not await require_alumni_board_role(interaction):
         return
 
     await defer_ephemeral(interaction)
@@ -1149,7 +1157,36 @@ async def event_reset_reminders(interaction: discord.Interaction, meeting: Optio
 @app_commands.describe(meeting="Optional meeting; defaults to the next upcoming alumni meeting")
 @app_commands.autocomplete(meeting=event_autocomplete)
 async def test_notify(interaction: discord.Interaction, meeting: Optional[str] = None) -> None:
-    if not await require_manage_guild(interaction):
+    await send_manual_notification(
+        interaction,
+        meeting,
+        config.alumni_board_role_id,
+        "test_notification_sent",
+        "Alumni Board",
+    )
+
+
+@bot.tree.command(name="notify", description="Post a notification for an alumni meeting.")
+@app_commands.describe(meeting="Optional meeting; defaults to the next upcoming alumni meeting")
+@app_commands.autocomplete(meeting=event_autocomplete)
+async def notify(interaction: discord.Interaction, meeting: Optional[str] = None) -> None:
+    await send_manual_notification(
+        interaction,
+        meeting,
+        config.alumni_role_id,
+        "manual_notification_sent",
+        "Alumni",
+    )
+
+
+async def send_manual_notification(
+    interaction: discord.Interaction,
+    meeting: Optional[str],
+    mention_role_id: int,
+    log_event_type: str,
+    mention_label: str,
+) -> None:
+    if not await require_alumni_board_role(interaction):
         return
 
     await defer_ephemeral(interaction)
@@ -1168,26 +1205,26 @@ async def test_notify(interaction: discord.Interaction, meeting: Optional[str] =
         return
 
     reminder_type = test_notification_type(event)
-    lines = compose_reminder_lines(event, config, reminder_type, interaction.user.mention)
+    lines = compose_reminder_lines(event, config, reminder_type, f"<@&{mention_role_id}>")
     try:
         await channel.send(
             truncate_public_message(lines),
-            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            allowed_mentions=role_only_allowed_mentions(mention_role_id),
         )
     except discord.DiscordException:
-        logger.exception("Failed to send test notification for event %s.", event["discord_event_id"])
-        await send_ephemeral(interaction, "I could not send the test notification to the announcement channel.")
+        logger.exception("Failed to send notification for event %s.", event["discord_event_id"])
+        await send_ephemeral(interaction, "I could not send the notification to the announcement channel.")
         return
 
     log_abuse_event(
-        "test_notification_sent",
+        log_event_type,
         interaction.user.id,
         event["discord_event_id"],
         reminder_type,
     )
     await send_ephemeral(
         interaction,
-        f"Sent a {reminder_label(reminder_type)} test notification to the announcement channel mentioning only you.",
+        f"Sent a {reminder_label(reminder_type)} notification to the announcement channel mentioning {mention_label}.",
     )
 
 
@@ -1214,7 +1251,7 @@ async def agenda_item_autocomplete(
 @app_commands.describe(agenda_item="Agenda item to remove")
 @app_commands.autocomplete(agenda_item=agenda_item_autocomplete)
 async def agenda_remove(interaction: discord.Interaction, agenda_item: int) -> None:
-    if not await require_manage_guild(interaction):
+    if not await require_alumni_board_role(interaction):
         return
 
     await defer_ephemeral(interaction)

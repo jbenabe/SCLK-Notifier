@@ -49,21 +49,22 @@
 - [ ] T028 Add tests proving repeated reminder checks do not duplicate sends.
 - [ ] T029 Add tests proving started events do not send reminders.
 - [ ] T029a Validate `ANNOUNCEMENT_CHANNEL_ID` by channel ID before notification sends and surface missing View Channel/Send Messages access clearly.
-- [ ] T029b Keep `/test_notify` as the only notification test command; it must use production notification composition and mention only the invoking Alumni Board member.
+- [ ] T029b Keep `/test_notify` as the board-safe notification test command; it must use production notification composition and mention the Alumni Board role.
+- [ ] T029e Add `/notify` with the same notification composition as `/test_notify`, differing only by tagging the Alumni role.
 - [ ] T029c Add tests proving failed Discord sends do not mark notification flags as sent.
 - [ ] T029d Document the current intended notification channel choices as `meeting` or `alumni-announcements`, with no channel-name fallback.
 
 ## Phase 6: Abuse Controls And Output Safety
 
-- [ ] T030 Enforce a per-user `/agenda_add` cooldown before accepting another item.
-- [ ] T031 Enforce a per-user agenda item quota per event.
+- [ ] T030 Remove the per-user `/agenda_add` cooldown so members can rapidfire valid agenda items.
+- [ ] T031 Remove the per-user agenda item quota per event.
 - [ ] T032 Enforce a total active agenda item quota per event.
 - [ ] T033 Add a temporary local cooldown after repeated rejected member write attempts.
 - [ ] T034 Sanitize agenda item display text so user-submitted mentions and deceptive markdown cannot ping or mislead members.
 - [ ] T035 Cap public reminder message length and truncate agenda content safely with guidance to run `/agenda`.
 - [ ] T036 Log abuse-relevant events: rate-limit hits, cooldowns, denied permissions, agenda removals, reminder sends, and send failures.
 - [ ] T037 Add `REMINDERS_ENABLED=false` as an emergency stop for reminder posts.
-- [ ] T038 Add tests for agenda cooldowns, per-user quotas, per-event quotas, and rejected-write cooldowns.
+- [ ] T038 Add tests for agenda rapidfire, per-event quotas, and rejected-write cooldowns.
 - [ ] T039 Add tests proving public reminder output respects the maximum rendered size.
 
 ## Phase 7: Admin And Member Polish

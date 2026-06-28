@@ -6,10 +6,11 @@ This is the shared backlog for SCLK Notifier. Prefer small pull requests that co
 
 - [ ] Run a live Discord smoke test from `docs/LOCAL_DEPLOY.md`.
 - [ ] Confirm `/event_sync` diagnostics are helpful when no upcoming visible event is found.
-- [ ] Confirm `/test_notify` posts a production-shaped notification that mentions only the command caller.
+- [ ] Confirm `/test_notify` posts a production-shaped notification that mentions the Alumni Board role.
 - [ ] Investigate notification behavior once expected-vs-actual details or screenshots are available; latest smoke test showed Discord `403 Missing Access` when sending to the announcement channel.
 - [ ] Point `ANNOUNCEMENT_CHANNEL_ID` at `alumni-announcements` (`1025518598166417559`) or `meeting`, then confirm the bot has View Channel and Send Messages access.
-- [ ] Require the new Alumni Board role (`1520613667513569384`) for elevated bot commands instead of broad Manage Server permission.
+- [ ] Confirm `ALUMNI_ROLE_ID` is the real Alumni role (`1025517273529729074`) so notifications do not render `@unknown-role`.
+- [ ] Confirm the new Alumni Board role (`1520613667513569384`) controls elevated bot commands instead of broad Manage Server permission.
 - [ ] Confirm mention-heavy agenda text does not ping anyone.
 - [ ] Confirm `REMINDERS_ENABLED=false` prevents public reminder posts.
 - [ ] Validate local redeploy instructions on the actual bot machine.

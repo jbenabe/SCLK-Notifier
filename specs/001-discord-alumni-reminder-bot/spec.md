@@ -37,7 +37,7 @@ As an alumni member, I can add an agenda item without knowing any event or datab
 2. Given no future server event exists, when a member runs `/agenda_add`, then the bot explains that an admin must create or verify the Discord event and sync.
 3. Given an item is empty or too long, when a member runs `/agenda_add`, then the bot rejects it with a clear ephemeral validation message.
 4. Given agenda items exist, when a member runs `/agenda`, then the bot lists active items in creation order with submitter display names.
-5. Given a member repeatedly submits agenda items, when they exceed configured cooldown or quota limits, then the bot rejects the write ephemerally, logs the safety event, and does not create public output.
+5. Given a member rapidly submits multiple valid agenda items, when the total meeting agenda is not full, then the bot accepts each item and keeps responses ephemeral.
 6. Given an agenda item contains Discord mentions or markdown, when the bot displays it in any command or reminder, then the content is neutralized and cannot ping anyone.
 
 ---
@@ -106,7 +106,7 @@ As an Alumni Board member, I can remove agenda items and reset reminder flags wh
 - **FR-009**: The bot MUST expose admin commands `/event_sync`, `/event_list`, `/event_reset_reminders`, and `/agenda_remove`.
 - **FR-010**: Elevated bot commands MUST require the configured `ALUMNI_BOARD_ROLE_ID`; Manage Server permission alone is not sufficient unless the user also has the board role.
 - **FR-011**: Commands that may exceed Discord's immediate response window MUST defer or otherwise acknowledge the interaction before slow work.
-- **FR-012**: Notification messages MUST mention only the configured alumni role, or only the invoking board member for `/test_notify`, and MUST disable broader role/user/everyone mentions.
+- **FR-012**: Notification messages MUST mention only the configured Alumni role, or only the configured Alumni Board role for `/test_notify`, and MUST disable broader role/user/everyone mentions.
 - **FR-013**: Reminder checks MUST be idempotent across process restarts by reading and writing SQLite reminder flags.
 - **FR-014**: Agenda item text MUST be trimmed, non-empty, and 500 characters or fewer.
 - **FR-015**: The bot MUST preserve removed agenda items as inactive records rather than deleting rows.
@@ -114,8 +114,8 @@ As an Alumni Board member, I can remove agenda items and reset reminder flags wh
 - **FR-017**: The bot MUST log Discord API failures, sync outcomes, reminder sends, and permission denials.
 - **FR-018**: Member-triggered command responses MUST be ephemeral by default and MUST NOT post to public channels.
 - **FR-019**: The bot MUST sanitize displayed user-submitted text so `@everyone`, `@here`, role mentions, user mentions, channel mentions, and deceptive markdown cannot ping or mislead members.
-- **FR-020**: `/agenda_add` MUST enforce a per-user cooldown before accepting another agenda item.
-- **FR-021**: `/agenda_add` MUST enforce a per-user agenda item quota per event.
+- **FR-020**: `/agenda_add` MUST allow rapid submissions from the same user without a per-user cooldown.
+- **FR-021**: `/agenda_add` MUST NOT enforce a per-user agenda item quota per event.
 - **FR-022**: `/agenda_add` MUST enforce a total agenda item quota per event.
 - **FR-023**: Repeated rejected member write attempts MUST trigger a temporary local cooldown.
 - **FR-024**: Public reminder messages MUST enforce a maximum rendered size and truncate agenda content safely when needed.
@@ -125,12 +125,13 @@ As an Alumni Board member, I can remove agenda items and reset reminder flags wh
 - **FR-028**: Admin diagnostics MUST NOT expose tokens, secrets, or private configuration values.
 - **FR-029**: The project MUST document an emergency stop path for public posting.
 - **FR-030**: When `REMINDERS_ENABLED=false`, the bot MUST skip public reminder posts while continuing to log that reminders were skipped.
-- **FR-031**: `/test_notify` MUST send a production-shaped notification to `ANNOUNCEMENT_CHANNEL_ID` using the same message composition as scheduled notifications while mentioning only the invoking board member.
+- **FR-031**: `/test_notify` MUST send a production-shaped notification to `ANNOUNCEMENT_CHANNEL_ID` using the same message composition as scheduled notifications while mentioning the Alumni Board role.
 - **FR-032**: The configured announcement channel MUST be validated by ID, not by channel name. For the current server, acceptable intended channels are `alumni-announcements` (`1025518598166417559`) or `meeting`; `announcements` should not be assumed if the bot lacks access.
 
 ## Key Entities
 
 - **Configured Guild**: The single Discord server the bot serves.
+- **Alumni Role**: The Discord role configured by `ALUMNI_ROLE_ID` that scheduled notifications and `/notify` mention. Current discovered server role: `Alumni` (`1025517273529729074`).
 - **Alumni Board Role**: The Discord role configured by `ALUMNI_BOARD_ROLE_ID` whose members can use elevated bot commands. Current discovered server role: `Alumni Board` (`1520613667513569384`).
 - **Announcement Channel**: The Discord channel configured by `ANNOUNCEMENT_CHANNEL_ID` where scheduled notifications and `/test_notify` are posted.
 - **Discord Scheduled Event**: The native Discord event used as the meeting source of truth.
@@ -148,7 +149,7 @@ As an Alumni Board member, I can remove agenda items and reset reminder flags wh
 - **SC-006**: A compromised member account cannot cause public channel spam by repeatedly invoking member commands.
 - **SC-007**: User text containing `@everyone`, `@here`, role mentions, user mentions, channel mentions, links, or markdown is displayed without pinging anyone.
 - **SC-008**: Oversized agenda content in reminders is truncated safely while preserving the reminder's meeting time and event link.
-- **SC-009**: `/test_notify` succeeds only when the bot can send to `ANNOUNCEMENT_CHANNEL_ID`, mentions only the invoking Alumni Board member, and leaves alumni-role notification state unchanged.
+- **SC-009**: `/test_notify` succeeds only when the bot can send to `ANNOUNCEMENT_CHANNEL_ID`, mentions only the Alumni Board role, and leaves alumni-role notification state unchanged.
 - **SC-010**: A user without the Alumni Board role cannot run elevated commands even if they are otherwise a normal server member.
 
 ## Assumptions

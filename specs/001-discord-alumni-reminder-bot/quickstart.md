@@ -85,4 +85,4 @@
 - Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown.
 - Confirm `/agenda` displays the item without pinging anyone.
 - Confirm reminder output either sanitizes the item safely or truncates it while preserving the meeting time and Discord event link.
-- Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
+- Rapidly submit several agenda items as the same test user and confirm they all appear in `/agenda`.

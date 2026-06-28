@@ -71,7 +71,7 @@ Acceptance target:
    - Status/time eligibility.
    - Agenda validation limits.
    - Mention neutralization and public output truncation.
-   - Member write cooldowns and agenda quotas.
+   - Member agenda validation and total event quotas.
    - Reminder due/not-due decisions.
    - Reminder mark-sent idempotency.
 3. Use ignored SQLite scratch databases in tests rather than the production `alumni_bot.db`.
@@ -97,8 +97,8 @@ Acceptance target:
 
 ## Phase 5 - Abuse Controls And Output Safety
 
-1. Add per-user `/agenda_add` cooldowns.
-2. Add per-user/per-event and total per-event agenda quotas.
+1. Allow rapid `/agenda_add` submissions from the same member.
+2. Keep total per-event agenda quotas.
 3. Add a temporary cooldown after repeated rejected member write attempts.
 4. Sanitize all user-submitted agenda text before display in commands or reminders.
 5. Neutralize Discord mentions, channel references, and deceptive markdown in displayed user text.
@@ -125,13 +125,13 @@ Acceptance target:
 - **Refactor regression**: Extract logic behind tests before changing command behavior deeply.
 - **SQLite schema drift**: Keep idempotent migrations and never destructively alter existing local data without a migration note.
 - **Reminder duplicates after event edits**: Treat Discord event ID as stable identity and require explicit admin reset if reminder flags should be reopened.
-- **Compromised member account spam**: Keep member responses ephemeral, enforce cooldowns/quotas, and never allow user text to create pings.
+- **Compromised member account spam**: Keep member responses ephemeral, enforce total agenda quotas, and never allow user text to create pings.
 - **Oversized agenda payloads**: Cap public reminder output and truncate agenda lines safely.
 
 ## Verification Strategy
 
 - Unit tests for pure logic and database repository behavior.
-- Unit tests for mention neutralization, member write cooldowns, agenda quotas, rejected-write cooldowns, and public output truncation.
+- Unit tests for mention neutralization, agenda rapidfire, agenda quotas, rejected-write cooldowns, and public output truncation.
 - Manual Discord smoke test for slash command registration and live Scheduled Event fetch.
 - Manual Discord smoke test with agenda text containing `@everyone`, `@here`, role mentions, user mentions, channel mentions, links, and markdown.
 - Manual reminder dry run using a near-future test event in a private/admin channel.
