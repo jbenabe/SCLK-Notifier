@@ -126,7 +126,7 @@ As an Alumni Board member, I can remove agenda items and reset reminder flags wh
 - **FR-029**: The project MUST document an emergency stop path for public posting.
 - **FR-030**: When `REMINDERS_ENABLED=false`, the bot MUST skip public reminder posts while continuing to log that reminders were skipped.
 - **FR-031**: `/test_notify` MUST send a production-shaped notification to `ANNOUNCEMENT_CHANNEL_ID` using the same message composition as scheduled notifications while mentioning only the invoking board member.
-- **FR-032**: The configured announcement channel MUST be validated by ID, not by channel name. For the current server, acceptable intended channels are `meeting` or `alumni-announcements`; `announcements` should not be assumed if the bot lacks access.
+- **FR-032**: The configured announcement channel MUST be validated by ID, not by channel name. For the current server, acceptable intended channels are `alumni-announcements` (`1025518598166417559`) or `meeting`; `announcements` should not be assumed if the bot lacks access.
 
 ## Key Entities
 

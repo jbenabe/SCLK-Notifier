@@ -273,7 +273,7 @@ If `/event_sync` finds no upcoming events, check:
 
 If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
 
-If `/test_notify` or scheduled notifications fail with `403 Missing Access`, check that `ANNOUNCEMENT_CHANNEL_ID` points to the intended channel, currently `meeting` or `alumni-announcements`, and that the bot has View Channel and Send Messages access there. The bot should use the configured channel ID and should not guess a channel by name.
+If `/test_notify` or scheduled notifications fail with `403 Missing Access`, check that `ANNOUNCEMENT_CHANNEL_ID` points to the intended channel, currently `alumni-announcements` (`1025518598166417559`) or `meeting`, and that the bot has View Channel and Send Messages access there. The bot should use the configured channel ID and should not guess a channel by name.
 
 If a slash command times out or Discord reports `Unknown interaction`, the command likely took too long before acknowledgement. Slow commands now defer ephemerally before fetching Discord data; check logs for Discord API errors around the command time.
 

@@ -69,7 +69,7 @@
 - Confirm the bot process is still running.
 - Confirm the event is tracked in `/event_list`.
 - Confirm the reminder flag has not already been marked sent.
-- Confirm `ANNOUNCEMENT_CHANNEL_ID` points to the intended notification channel, currently `meeting` or `alumni-announcements`.
+- Confirm `ANNOUNCEMENT_CHANNEL_ID` points to the intended notification channel, currently `alumni-announcements` (`1025518598166417559`) or `meeting`.
 - Confirm the bot has View Channel and Send Messages access in `ANNOUNCEMENT_CHANNEL_ID`.
 - Confirm the bot can mention the configured alumni role.
 - Confirm elevated command users have the configured Alumni Board role.
