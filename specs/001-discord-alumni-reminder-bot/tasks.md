@@ -18,10 +18,12 @@
 - [ ] T008 Update `/agenda` and `/agenda_add` to use the same safe acknowledgement pattern.
 - [ ] T009 Update `/event_sync` and `/event_list` to use the same safe acknowledgement pattern.
 - [ ] T010 Log late interaction failures with command name and user ID, without crashing the bot loop.
+- [ ] T010a Replace Manage Server checks for elevated commands with configured Alumni Board role membership.
+- [ ] T010b Add `ALUMNI_BOARD_ROLE_ID` to config loading, `.env.example`, README setup docs, and startup validation.
 
 ## Phase 3: Event Sync Diagnostics
 
-- [ ] T011 Introduce a sync result object with fetched count, matched events, non-matching event diagnostics, and optional error.
+- [ ] T011 Introduce a sync result object with fetched count, eligible events, ineligible event diagnostics, and optional error.
 - [ ] T012 Record event eligibility rejection reasons for status, missing start time, and past start time.
 - [ ] T013 Update `/event_sync` no-event output to show fetched event counts and limited ineligible event names.
 - [ ] T014 Update `/event_list` to preserve current admin details while using structured sync results.
@@ -46,18 +48,23 @@
 - [ ] T027 Decide and document behavior when an event is first discovered inside the 1-hour reminder window.
 - [ ] T028 Add tests proving repeated reminder checks do not duplicate sends.
 - [ ] T029 Add tests proving started events do not send reminders.
+- [ ] T029a Validate `ANNOUNCEMENT_CHANNEL_ID` by channel ID before notification sends and surface missing View Channel/Send Messages access clearly.
+- [ ] T029b Keep `/test_notify` as the board-safe notification test command; it must use production notification composition and mention the Alumni Board role.
+- [ ] T029e Add `/notify` with the same notification composition as `/test_notify`, differing only by tagging the Alumni role.
+- [ ] T029c Add tests proving failed Discord sends do not mark notification flags as sent.
+- [ ] T029d Document the current intended notification channel choices as `meeting` or `alumni-announcements`, with no channel-name fallback.
 
 ## Phase 6: Abuse Controls And Output Safety
 
-- [ ] T030 Enforce a per-user `/agenda_add` cooldown before accepting another item.
-- [ ] T031 Enforce a per-user agenda item quota per event.
+- [ ] T030 Remove the per-user `/agenda_add` cooldown so members can rapidfire valid agenda items.
+- [ ] T031 Remove the per-user agenda item quota per event.
 - [ ] T032 Enforce a total active agenda item quota per event.
 - [ ] T033 Add a temporary local cooldown after repeated rejected member write attempts.
 - [ ] T034 Sanitize agenda item display text so user-submitted mentions and deceptive markdown cannot ping or mislead members.
 - [ ] T035 Cap public reminder message length and truncate agenda content safely with guidance to run `/agenda`.
 - [ ] T036 Log abuse-relevant events: rate-limit hits, cooldowns, denied permissions, agenda removals, reminder sends, and send failures.
 - [ ] T037 Add `REMINDERS_ENABLED=false` as an emergency stop for reminder posts.
-- [ ] T038 Add tests for agenda cooldowns, per-user quotas, per-event quotas, and rejected-write cooldowns.
+- [ ] T038 Add tests for agenda rapidfire, per-event quotas, and rejected-write cooldowns.
 - [ ] T039 Add tests proving public reminder output respects the maximum rendered size.
 
 ## Phase 7: Admin And Member Polish

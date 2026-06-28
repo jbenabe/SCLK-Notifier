@@ -71,6 +71,7 @@ DISCORD_TOKEN=
 GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
+ALUMNI_BOARD_ROLE_ID=
 TIMEZONE=America/New_York
 DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
@@ -104,13 +105,15 @@ python3 bot.py
 In Discord:
 
 1. Create a future native Discord Scheduled Event.
-2. As a Manage Server admin, run `/event_sync`.
+2. As an Alumni Board member, run `/event_sync`.
 3. Run `/event_list`.
 4. Run `/next_meeting`.
-5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning only you.
-6. Run `/agenda_add item:"Test agenda item"`.
-7. Run `/agenda`.
-8. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning the Alumni Board role.
+6. Run `/notify` only when ready to ping the Alumni role.
+7. Run `/agenda_add item:"Test agenda item"`.
+8. Run `/agenda`.
+9. Rapidly add several agenda items and confirm each appears in `/agenda`.
+10. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
 
 ---
 

@@ -37,11 +37,11 @@ Use `/agenda_add` to add an agenda item:
 /agenda_add item:"Discuss Derby Days fundraiser planning"
 ```
 
-The bot automatically attaches the agenda item to the next upcoming matching Discord event. Members do not need to know event IDs, server IDs, channel IDs, role IDs, or database IDs.
+The bot automatically attaches the agenda item to the next upcoming visible Discord event. Members do not need to know event IDs, server IDs, channel IDs, role IDs, or database IDs.
 
 ## For Admins
 
-Admin commands require the Discord **Manage Server** permission.
+Elevated bot commands require the configured **Alumni Board** role.
 
 1. Create the recurring alumni meeting using Discord's normal Event UI.
 2. Run:
@@ -65,7 +65,8 @@ Admin commands:
 | `/event_sync` | Fetches visible Discord Scheduled Events and tracks them locally. |
 | `/event_list` | Shows upcoming tracked events, reminder status, agenda count, event links, and admin-only technical details. |
 | `/event_reset_reminders` | Resets reminder flags for the selected meeting, or the next meeting by default. |
-| `/test_notify` | Posts a production-shaped test notification mentioning only the admin who ran it. |
+| `/test_notify` | Posts a production-shaped test notification mentioning the Alumni Board role. |
+| `/notify` | Posts a production-shaped notification mentioning the Alumni role. |
 | `/agenda_remove` | Removes an agenda item. Uses autocomplete for agenda item choices where available. |
 
 Use `/event_reset_reminders` if an event time changes and you want the bot to be able to send reminders again.
@@ -79,6 +80,7 @@ DISCORD_TOKEN=
 GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
+ALUMNI_BOARD_ROLE_ID=
 TIMEZONE=America/New_York
 DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
@@ -89,7 +91,8 @@ Field meanings:
 - `DISCORD_TOKEN`: Discord bot token.
 - `GUILD_ID`: Discord server ID.
 - `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
-- `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
+- `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping. Current server value: `1025517273529729074`.
+- `ALUMNI_BOARD_ROLE_ID`: Role ID for members allowed to run elevated bot commands. Current server value: `1520613667513569384`.
 - `TIMEZONE`: Default timezone for readable admin labels.
 - `DISCORD_BOT_PERMISSIONS`: Bot invite permission integer. Use `8462797117848576` when regenerating the OAuth2 invite URL.
 - `REMINDERS_ENABLED`: Optional emergency stop for public reminder posting. Defaults to `true`; set to `false` and restart the bot to prevent reminder posts.
@@ -211,13 +214,19 @@ Reminder messages include:
 
 ## Safe Notification Testing
 
-Admins can post a test notification without pinging the alumni role:
+Alumni Board members can post a test notification without pinging the alumni role:
 
 ```text
 /test_notify
 ```
 
-This posts the same production-shaped notification body to the announcement channel, but mentions only the admin who ran the command.
+This posts the same production-shaped notification body to the announcement channel, but mentions the Alumni Board role instead of the Alumni role.
+
+To send the same production-shaped notification to the Alumni role, run:
+
+```text
+/notify
+```
 
 ## Agenda Behavior
 
@@ -229,24 +238,22 @@ Members add agenda items with:
 
 Validation rules:
 
-- The bot must be able to find an upcoming matching Discord event.
+- The bot must be able to find an upcoming visible Discord event.
 - The event must not have started.
 - Agenda items must not be empty.
 - Agenda items must be 500 characters or fewer.
-- Agenda submissions are rate limited per user.
-- Each user may add up to 3 active items per meeting.
 - Each meeting may have up to 25 active agenda items.
 - Repeated rejected write attempts can temporarily block more agenda writes.
 - Displayed agenda text is sanitized so mentions and markdown cannot create pings or deceptive formatting.
 
-Admins can remove agenda items with `/agenda_remove`. Removed items are marked inactive in SQLite rather than deleted.
+Alumni Board members can remove agenda items with `/agenda_remove`. Removed items are marked inactive in SQLite rather than deleted.
 
 ## Abuse Controls And Emergency Stop
 
 This bot assumes member accounts may occasionally be compromised. To avoid bot-amplified spam:
 
 - Member command responses are ephemeral.
-- Member agenda writes have cooldowns and quotas.
+- Member agenda writes have length validation and a total per-event cap.
 - Reminder agenda output is capped and truncated when needed.
 - Abuse-relevant events such as rate-limit hits, denied permissions, agenda removals, reminder sends, and send failures are stored in SQLite.
 
@@ -269,6 +276,8 @@ If `/event_sync` finds no upcoming events, check:
 
 If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
 
+If `/test_notify` or scheduled notifications fail with `403 Missing Access`, check that `ANNOUNCEMENT_CHANNEL_ID` points to the intended channel, currently `alumni-announcements` (`1025518598166417559`) or `meeting`, and that the bot has View Channel and Send Messages access there. The bot should use the configured channel ID and should not guess a channel by name.
+
 If a slash command times out or Discord reports `Unknown interaction`, the command likely took too long before acknowledgement. Slow commands now defer ephemerally before fetching Discord data; check logs for Discord API errors around the command time.
 
 Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does not use Discord voice.
@@ -277,12 +286,13 @@ Warnings about `PyNaCl`, `davey`, or voice support can be ignored. This bot does
 
 1. Start the bot and confirm slash command sync appears in the logs.
 2. Create a future Discord Scheduled Event in the configured server.
-3. Run `/event_sync` as an admin and confirm the event is tracked.
+3. Run `/event_sync` as an Alumni Board member and confirm the event is tracked.
 4. Run `/next_meeting`, `/agenda_add`, and `/agenda`.
-5. Run `/test_notify` and confirm the announcement channel message mentions only you.
-6. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
-7. Repeatedly submit agenda items as the same test user and confirm cooldowns or quotas stop additional writes without public messages.
-8. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
+5. Run `/test_notify` and confirm the announcement channel message mentions the Alumni Board role.
+6. Run `/notify` only when ready to ping the Alumni role.
+7. Add a test agenda item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+8. Rapidly submit multiple agenda items as the same test user and confirm each one appears in `/agenda`.
+9. Set `REMINDERS_ENABLED=false`, restart, and confirm reminder checks do not post public reminders.
 
 ## Hosting Notes
 
