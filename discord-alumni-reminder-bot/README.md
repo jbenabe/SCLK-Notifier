@@ -41,7 +41,9 @@ The bot automatically attaches the agenda item to the next upcoming visible Disc
 
 ## For Admins
 
-Admin commands require the Discord **Manage Server** permission.
+Current code requires the Discord **Manage Server** permission for admin commands.
+
+Planned update: elevated bot commands should require the configured **Alumni Board** role instead of broad Manage Server permission.
 
 1. Create the recurring alumni meeting using Discord's normal Event UI.
 2. Run:
@@ -79,6 +81,7 @@ DISCORD_TOKEN=
 GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
+ALUMNI_BOARD_ROLE_ID=
 TIMEZONE=America/New_York
 DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
@@ -90,6 +93,7 @@ Field meanings:
 - `GUILD_ID`: Discord server ID.
 - `ANNOUNCEMENT_CHANNEL_ID`: Channel where reminders should be posted.
 - `ALUMNI_ROLE_ID`: Role ID for the alumni role to ping.
+- `ALUMNI_BOARD_ROLE_ID`: Planned role ID for members allowed to run elevated bot commands.
 - `TIMEZONE`: Default timezone for readable admin labels.
 - `DISCORD_BOT_PERMISSIONS`: Bot invite permission integer. Use `8462797117848576` when regenerating the OAuth2 invite URL.
 - `REMINDERS_ENABLED`: Optional emergency stop for public reminder posting. Defaults to `true`; set to `false` and restart the bot to prevent reminder posts.
@@ -268,6 +272,8 @@ If `/event_sync` finds no upcoming events, check:
 - The bot can view/fetch server scheduled events.
 
 If the bot logs `Fetched 0 events`, Discord returned no scheduled events to the bot. Check that the event is in the same server as `GUILD_ID`, that the bot is invited to that server, and that the event is visible to the bot. Recurring events should still be created and edited in Discord; the bot relies on Discord to expose the next concrete scheduled occurrence.
+
+If `/test_notify` or scheduled notifications fail with `403 Missing Access`, check that `ANNOUNCEMENT_CHANNEL_ID` points to the intended channel, currently `meeting` or `alumni-announcements`, and that the bot has View Channel and Send Messages access there. The bot should use the configured channel ID and should not guess a channel by name.
 
 If a slash command times out or Discord reports `Unknown interaction`, the command likely took too long before acknowledgement. Slow commands now defer ephemerally before fetching Discord data; check logs for Discord API errors around the command time.
 

@@ -44,7 +44,7 @@ As an alumni member, I can add an agenda item without knowing any event or datab
 
 ### User Story 3 - Admin can diagnose event visibility (Priority: P1)
 
-As a server admin, I can sync and list Discord Scheduled Events so I know whether the bot sees the meeting and why a match was or was not tracked.
+As an Alumni Board member, I can sync and list Discord Scheduled Events so I know whether the bot sees the meeting and why an event was or was not tracked.
 
 **Why this priority**: The last observed run authenticated successfully but found zero visible events. Admin diagnostics must make that situation actionable.
 
@@ -61,26 +61,27 @@ As a server admin, I can sync and list Discord Scheduled Events so I know whethe
 
 ### User Story 4 - Bot sends reliable reminders (Priority: P1)
 
-As an alumni organizer, I want the bot to send 7-day and 1-hour reminders exactly once per event, including the native Discord event link and current agenda.
+As an alumni organizer, I want the bot to send 7-day, 1-day, and day-of notifications exactly once per event, including the native Discord event link and current agenda.
 
 **Why this priority**: The bot's main value is dependable reminder delivery.
 
-**Independent Test**: Seed a tracked event within the 7-day window and run the reminder check twice; the first run sends and marks the reminder, the second run does not send again.
+**Independent Test**: Seed a tracked event within the 7-day window and run the reminder check twice; the first run sends and marks the notification, the second run does not send again.
 
 **Acceptance Scenarios**:
 
-1. Given a future tracked event enters the 7-day reminder window, when the reminder loop runs, then the bot posts a role mention, meeting time, event link, agenda summary, and RSVP prompt.
-2. Given a future tracked event enters the 1-hour reminder window, when the reminder loop runs, then the bot posts a shorter reminder with the agenda.
-3. Given a reminder was already sent, when the bot restarts and the loop runs again, then it does not resend that reminder.
-4. Given the meeting has started, when the reminder loop runs, then no new reminder is sent.
-5. Given agenda content would make a public reminder too long, when the reminder is composed, then the agenda is truncated safely and the reminder points members to `/agenda`.
-6. Given reminder send state is ambiguous, when the reminder loop runs, then the bot skips public posting, logs the ambiguity, and does not risk duplicate spam.
+1. Given a future tracked event enters the 7-day, 1-day, or day-of notification window, when the reminder loop runs, then the bot posts to the configured announcement channel with the alumni role mention, meeting time, event link, agenda summary, and RSVP prompt.
+2. Given a notification was already sent, when the bot restarts and the loop runs again, then it does not resend that notification.
+3. Given the meeting has started, when the reminder loop runs, then no new notification is sent.
+4. Given agenda content would make a public notification too long, when the notification is composed, then the agenda is truncated safely and the notification points members to `/agenda`.
+5. Given notification send state is ambiguous, when the reminder loop runs, then the bot skips public posting, logs the ambiguity, and does not risk duplicate spam.
+6. Given `ANNOUNCEMENT_CHANNEL_ID` points to a channel the bot cannot view or send to, when `/test_notify` or a scheduled notification tries to post, then the bot reports/logs a channel permission failure and does not mark the notification as sent.
+7. Given the server has channels named `meeting`, `alumni-announcements`, or `announcements`, when the bot sends notifications, then it uses only `ANNOUNCEMENT_CHANNEL_ID` and does not guess by channel name.
 
 ---
 
 ### User Story 5 - Admin controls agenda and reminder state (Priority: P2)
 
-As a server admin, I can remove agenda items and reset reminder flags when an event changes.
+As an Alumni Board member, I can remove agenda items and reset reminder flags when an event changes.
 
 **Why this priority**: These workflows support real meeting maintenance after the core member and reminder flows work.
 
@@ -90,11 +91,11 @@ As a server admin, I can remove agenda items and reset reminder flags when an ev
 
 1. Given agenda items exist for the next meeting, when an admin runs `/agenda_remove`, then autocomplete offers active items and the chosen item is soft-deleted.
 2. Given a tracked event exists, when an admin runs `/event_reset_reminders`, then both reminder flags are reset for that event.
-3. Given a non-admin invokes either command, then the bot denies the command ephemerally.
+3. Given a user without the configured Alumni Board role invokes an elevated command, then the bot denies the command ephemerally.
 
 ## Functional Requirements
 
-- **FR-001**: The bot MUST load configuration from environment variables: `DISCORD_TOKEN`, `GUILD_ID`, `ANNOUNCEMENT_CHANNEL_ID`, `ALUMNI_ROLE_ID`, `TIMEZONE`, and optional `REMINDERS_ENABLED`.
+- **FR-001**: The bot MUST load configuration from environment variables: `DISCORD_TOKEN`, `GUILD_ID`, `ANNOUNCEMENT_CHANNEL_ID`, `ALUMNI_ROLE_ID`, `ALUMNI_BOARD_ROLE_ID`, `TIMEZONE`, and optional `REMINDERS_ENABLED`.
 - **FR-002**: The bot MUST fail startup with a readable error when required configuration is missing or malformed.
 - **FR-003**: The bot MUST sync guild-specific slash commands for fast availability.
 - **FR-004**: The bot MUST fetch Discord Scheduled Events from exactly one configured guild.
@@ -103,9 +104,9 @@ As a server admin, I can remove agenda items and reset reminder flags when an ev
 - **FR-007**: The bot MUST deactivate cached events that are no longer returned, no longer eligible, or already started.
 - **FR-008**: The bot MUST expose member commands `/next_meeting`, `/agenda`, and `/agenda_add`.
 - **FR-009**: The bot MUST expose admin commands `/event_sync`, `/event_list`, `/event_reset_reminders`, and `/agenda_remove`.
-- **FR-010**: Admin commands MUST require Manage Server permission.
+- **FR-010**: Elevated bot commands MUST require the configured `ALUMNI_BOARD_ROLE_ID`; Manage Server permission alone is not sufficient unless the user also has the board role.
 - **FR-011**: Commands that may exceed Discord's immediate response window MUST defer or otherwise acknowledge the interaction before slow work.
-- **FR-012**: Reminder messages MUST mention only the configured alumni role and must disable broader user/everyone mentions.
+- **FR-012**: Notification messages MUST mention only the configured alumni role, or only the invoking board member for `/test_notify`, and MUST disable broader role/user/everyone mentions.
 - **FR-013**: Reminder checks MUST be idempotent across process restarts by reading and writing SQLite reminder flags.
 - **FR-014**: Agenda item text MUST be trimmed, non-empty, and 500 characters or fewer.
 - **FR-015**: The bot MUST preserve removed agenda items as inactive records rather than deleting rows.
@@ -124,10 +125,14 @@ As a server admin, I can remove agenda items and reset reminder flags when an ev
 - **FR-028**: Admin diagnostics MUST NOT expose tokens, secrets, or private configuration values.
 - **FR-029**: The project MUST document an emergency stop path for public posting.
 - **FR-030**: When `REMINDERS_ENABLED=false`, the bot MUST skip public reminder posts while continuing to log that reminders were skipped.
+- **FR-031**: `/test_notify` MUST send a production-shaped notification to `ANNOUNCEMENT_CHANNEL_ID` using the same message composition as scheduled notifications while mentioning only the invoking board member.
+- **FR-032**: The configured announcement channel MUST be validated by ID, not by channel name. For the current server, acceptable intended channels are `meeting` or `alumni-announcements`; `announcements` should not be assumed if the bot lacks access.
 
 ## Key Entities
 
 - **Configured Guild**: The single Discord server the bot serves.
+- **Alumni Board Role**: The Discord role configured by `ALUMNI_BOARD_ROLE_ID` whose members can use elevated bot commands. Current discovered server role: `Alumni Board` (`1520613667513569384`).
+- **Announcement Channel**: The Discord channel configured by `ANNOUNCEMENT_CHANNEL_ID` where scheduled notifications and `/test_notify` are posted.
 - **Discord Scheduled Event**: The native Discord event used as the meeting source of truth.
 - **Tracked Event**: A local SQLite cache row keyed by Discord event ID with reminder flags and sync metadata.
 - **Agenda Item**: A member-submitted discussion item attached to a tracked event.
@@ -143,6 +148,8 @@ As a server admin, I can remove agenda items and reset reminder flags when an ev
 - **SC-006**: A compromised member account cannot cause public channel spam by repeatedly invoking member commands.
 - **SC-007**: User text containing `@everyone`, `@here`, role mentions, user mentions, channel mentions, links, or markdown is displayed without pinging anyone.
 - **SC-008**: Oversized agenda content in reminders is truncated safely while preserving the reminder's meeting time and event link.
+- **SC-009**: `/test_notify` succeeds only when the bot can send to `ANNOUNCEMENT_CHANNEL_ID`, mentions only the invoking Alumni Board member, and leaves alumni-role notification state unchanged.
+- **SC-010**: A user without the Alumni Board role cannot run elevated commands even if they are otherwise a normal server member.
 
 ## Assumptions
 

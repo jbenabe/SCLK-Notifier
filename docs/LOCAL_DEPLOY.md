@@ -59,6 +59,7 @@ DISCORD_TOKEN=
 GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
+ALUMNI_BOARD_ROLE_ID=
 TIMEZONE=America/New_York
 DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
@@ -86,7 +87,7 @@ python bot.py
 In Discord:
 
 1. Create a future native Discord Scheduled Event.
-2. As a Manage Server admin, run `/event_sync`.
+2. As an elevated bot user, run `/event_sync`. Current code requires Manage Server; the planned role gate is the configured Alumni Board role.
 3. Run `/event_list`.
 4. Run `/next_meeting`.
 5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning only you.
@@ -227,7 +228,7 @@ python -m py_compile bot.py
 python -m unittest discover -s tests
 ```
 
-7. Confirm `.env` still has the correct Discord values, `DISCORD_BOT_PERMISSIONS=8462797117848576`, and `REMINDERS_ENABLED=true`.
+7. Confirm `.env` still has the correct Discord values, `ALUMNI_BOARD_ROLE_ID`, `DISCORD_BOT_PERMISSIONS=8462797117848576`, and `REMINDERS_ENABLED=true`.
 
 8. Verify database integrity:
 

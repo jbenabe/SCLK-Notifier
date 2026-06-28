@@ -28,6 +28,7 @@
    GUILD_ID=
    ANNOUNCEMENT_CHANNEL_ID=
    ALUMNI_ROLE_ID=
+   ALUMNI_BOARD_ROLE_ID=
    TIMEZONE=America/New_York
    REMINDERS_ENABLED=true
    ```
@@ -42,7 +43,7 @@
 
 1. Confirm the bot logs in and reports slash command sync.
 2. Create a future Discord Scheduled Event in the configured guild.
-3. Run `/event_sync` as a Manage Server admin.
+3. Run `/event_sync` as a user with the configured Alumni Board role.
 4. Run `/event_list` and confirm the event appears.
 5. Run `/next_meeting` as a normal member.
 6. Run `/agenda_add item:"Test agenda item"`.
@@ -68,8 +69,10 @@
 - Confirm the bot process is still running.
 - Confirm the event is tracked in `/event_list`.
 - Confirm the reminder flag has not already been marked sent.
-- Confirm `ANNOUNCEMENT_CHANNEL_ID` points to a channel where the bot can send messages.
+- Confirm `ANNOUNCEMENT_CHANNEL_ID` points to the intended notification channel, currently `meeting` or `alumni-announcements`.
+- Confirm the bot has View Channel and Send Messages access in `ANNOUNCEMENT_CHANNEL_ID`.
 - Confirm the bot can mention the configured alumni role.
+- Confirm elevated command users have the configured Alumni Board role.
 
 ### Emergency Stop For Public Posting
 

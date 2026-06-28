@@ -18,6 +18,8 @@
 - [ ] T008 Update `/agenda` and `/agenda_add` to use the same safe acknowledgement pattern.
 - [ ] T009 Update `/event_sync` and `/event_list` to use the same safe acknowledgement pattern.
 - [ ] T010 Log late interaction failures with command name and user ID, without crashing the bot loop.
+- [ ] T010a Replace Manage Server checks for elevated commands with configured Alumni Board role membership.
+- [ ] T010b Add `ALUMNI_BOARD_ROLE_ID` to config loading, `.env.example`, README setup docs, and startup validation.
 
 ## Phase 3: Event Sync Diagnostics
 
@@ -46,6 +48,10 @@
 - [ ] T027 Decide and document behavior when an event is first discovered inside the 1-hour reminder window.
 - [ ] T028 Add tests proving repeated reminder checks do not duplicate sends.
 - [ ] T029 Add tests proving started events do not send reminders.
+- [ ] T029a Validate `ANNOUNCEMENT_CHANNEL_ID` by channel ID before notification sends and surface missing View Channel/Send Messages access clearly.
+- [ ] T029b Keep `/test_notify` as the only notification test command; it must use production notification composition and mention only the invoking Alumni Board member.
+- [ ] T029c Add tests proving failed Discord sends do not mark notification flags as sent.
+- [ ] T029d Document the current intended notification channel choices as `meeting` or `alumni-announcements`, with no channel-name fallback.
 
 ## Phase 6: Abuse Controls And Output Safety
 
