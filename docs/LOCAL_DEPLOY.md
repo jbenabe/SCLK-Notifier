@@ -2,6 +2,8 @@
 
 This guide gets SCLK Notifier running from a Windows PC. It is the MVP deployment path until an always-on host is selected.
 
+Examples use `$RepoRoot` and `$BotDir` so the same commands work on any Windows user account. Set `$RepoRoot` to wherever you cloned the repository.
+
 ## First-Time Setup
 
 1. Open PowerShell.
@@ -9,15 +11,19 @@ This guide gets SCLK Notifier running from a Windows PC. It is the MVP deploymen
 2. Clone the repo:
 
 ```
-cd C:\Users\andre\Documents
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd (Split-Path $RepoRoot)
 git clone https://github.com/award73/SCLK-Notifier.git
-cd SCLK-Notifier\discord-alumni-reminder-bot
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+cd $BotDir
 ```
 
    If the repo is already cloned:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+cd $BotDir
 ```
 
 3. Create and activate a virtual environment:
@@ -99,8 +105,9 @@ restarting the bot will not affect the database file.
 Before pulling new code, open PowerShell and take a snapshot of the database:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 ### Restore from backup
@@ -108,8 +115,9 @@ Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alu
 If something goes wrong after a code update, stop the bot and restore:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db.bak') (Join-Path $BotDir 'alumni_bot.db')
 ```
 
 Then restart the bot normally.
@@ -146,11 +154,12 @@ To automatically back up the database every day, use Windows Task Scheduler with
 simple PowerShell script.
 
 Create a file called `backup_db.ps1` anywhere convenient, for example
-`C:\Users\andre\Documents\backup_db.ps1`, with this content:
+`$env:USERPROFILE\Documents\backup_db.ps1`, with this content:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 Then in Task Scheduler:
@@ -161,7 +170,7 @@ Then in Task Scheduler:
 4. Set the trigger to **Daily** at a time the bot is unlikely to be writing, such as 2:00 AM.
 5. Set the action to **Start a program**.
 6. Program: `powershell.exe`
-7. Arguments: `-ExecutionPolicy Bypass -File "C:\Users\andre\Documents\backup_db.ps1"`
+7. Arguments: `-ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\backup_db.ps1"`
 8. Click **Finish**.
 
 This overwrites the previous `.bak` file daily, giving you a rolling 24-hour safety net.
@@ -177,14 +186,16 @@ Use this when new code has been merged or you want to test a branch.
 2. Back up the database before making any changes:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 3. Update the repo:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git switch main
 git pull
 ```
@@ -257,14 +268,16 @@ Use this if the latest code fails and you need to test a known-good commit.
 2. Restore the database backup taken before the failed deploy:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db.bak') (Join-Path $BotDir 'alumni_bot.db')
 ```
 
 3. Verify the restored database is healthy:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd (Join-Path $RepoRoot 'discord-alumni-reminder-bot')
 python -c "import sqlite3; conn = sqlite3.connect('alumni_bot.db'); print(conn.execute('PRAGMA integrity_check;').fetchone()[0]); conn.close()"
 ```
 
@@ -273,7 +286,8 @@ Confirm the output is `ok` before continuing.
 4. Show recent commits:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git log --oneline
 ```
 
@@ -296,7 +310,8 @@ python bot.py
 7. After testing, return to a branch:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git switch main
 ```
 

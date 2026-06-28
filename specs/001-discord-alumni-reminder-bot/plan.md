@@ -19,7 +19,7 @@
 - Member commands hide IDs and technical details: PASS
 - Bot-induced spam prevention is mandatory: NEEDS WORK
 - Reminder idempotency is required and already partially modeled: PASS WITH WORK
-- Admin diagnostics are currently too thin when zero events match: NEEDS WORK
+- Admin diagnostics are currently too thin when zero visible events are found: NEEDS WORK
 - Small local runtime remains intact: PASS
 
 ## Proposed Architecture
@@ -53,7 +53,7 @@ Acceptance target:
    - Discord events fetched count.
    - Matching events count.
    - Matching event summaries.
-   - Non-matching future scheduled event names and start times, limited to a safe count.
+   - Ineligible future scheduled event names and start times, limited to a safe count.
    - Fetch/permission errors.
 2. Update `/event_sync` no-event output to explain exactly what Discord returned.
 3. Update logs to include event IDs, names, statuses, and eligibility reasons at debug/info level.
@@ -67,7 +67,7 @@ Acceptance target:
 1. Keep pure helpers near the existing command handlers.
 2. Add tests for:
    - Config validation.
-   - Case-insensitive event name matching.
+   - Event eligibility without name filtering.
    - Status/time eligibility.
    - Agenda validation limits.
    - Mention neutralization and public output truncation.

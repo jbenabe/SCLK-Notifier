@@ -37,7 +37,7 @@ Use `/agenda_add` to add an agenda item:
 /agenda_add item:"Discuss Derby Days fundraiser planning"
 ```
 
-The bot automatically attaches the agenda item to the next upcoming matching Discord event. Members do not need to know event IDs, server IDs, channel IDs, role IDs, or database IDs.
+The bot automatically attaches the agenda item to the next upcoming visible Discord event. Members do not need to know event IDs, server IDs, channel IDs, role IDs, or database IDs.
 
 ## For Admins
 
@@ -229,7 +229,7 @@ Members add agenda items with:
 
 Validation rules:
 
-- The bot must be able to find an upcoming matching Discord event.
+- The bot must be able to find an upcoming visible Discord event.
 - The event must not have started.
 - Agenda items must not be empty.
 - Agenda items must be 500 characters or fewer.

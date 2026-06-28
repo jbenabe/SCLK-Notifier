@@ -9,7 +9,7 @@
 
 ### User Story 1 - Member sees the next meeting (Priority: P1)
 
-As an alumni member, I can run `/next_meeting` and immediately see the next matching Discord Scheduled Event, its Discord event link, meeting time, and agenda count.
+As an alumni member, I can run `/next_meeting` and immediately see the next upcoming visible Discord Scheduled Event, its Discord event link, meeting time, and agenda count.
 
 **Why this priority**: If members cannot discover the next meeting, reminder and agenda features are hard to trust.
 
@@ -17,8 +17,8 @@ As an alumni member, I can run `/next_meeting` and immediately see the next matc
 
 **Acceptance Scenarios**:
 
-1. Given a matching future scheduled event exists, when a member runs `/next_meeting`, then the bot returns the event name, Discord timestamp, event link, and agenda item count.
-2. Given no matching future event exists, when a member runs `/next_meeting`, then the bot returns a helpful ephemeral message and does not raise `Unknown interaction`.
+1. Given a future visible scheduled event exists, when a member runs `/next_meeting`, then the bot returns the event name, Discord timestamp, event link, and agenda item count.
+2. Given no future visible event exists, when a member runs `/next_meeting`, then the bot returns a helpful ephemeral message and does not raise `Unknown interaction`.
 3. Given event sync requires a Discord API fetch, when `/next_meeting` is invoked, then the bot acknowledges or defers before the Discord interaction expires.
 
 ---
@@ -42,7 +42,7 @@ As an alumni member, I can add an agenda item without knowing any event or datab
 
 ---
 
-### User Story 3 - Admin can diagnose event matching (Priority: P1)
+### User Story 3 - Admin can diagnose event visibility (Priority: P1)
 
 As a server admin, I can sync and list Discord Scheduled Events so I know whether the bot sees the meeting and why a match was or was not tracked.
 
@@ -135,7 +135,7 @@ As a server admin, I can remove agenda items and reset reminder flags when an ev
 
 ## Success Criteria
 
-- **SC-001**: `/next_meeting` responds successfully within Discord's interaction window in both matching-event and no-event cases.
+- **SC-001**: `/next_meeting` responds successfully within Discord's interaction window in both visible-event and no-event cases.
 - **SC-002**: Admins can identify a missing, past, inaccessible, or otherwise ineligible Discord event from `/event_sync` output without reading logs.
 - **SC-003**: A seeded reminder check sends each reminder type no more than once per event across repeated runs.
 - **SC-004**: Agenda add/list/remove behavior can be verified locally against SQLite without connecting to Discord.

@@ -15,7 +15,8 @@ For exact local install, test, run, redeploy, and rollback steps, see:
 Short version for an existing checkout on Windows:
 
 ```powershell
-cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd (Join-Path $RepoRoot 'discord-alumni-reminder-bot')
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m unittest discover -s tests

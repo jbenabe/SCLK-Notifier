@@ -1158,7 +1158,7 @@ async def test_notify(interaction: discord.Interaction, meeting: Optional[str] =
     if event is None:
         await send_ephemeral(
             interaction,
-            "I could not find an upcoming Discord event to preview.",
+            "I could not find an upcoming Discord event to notify about.",
         )
         return
 
