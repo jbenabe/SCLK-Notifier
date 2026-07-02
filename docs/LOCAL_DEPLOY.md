@@ -2,6 +2,8 @@
 
 This guide gets SCLK Notifier running from a Windows PC. It is the MVP deployment path until an always-on host is selected.
 
+Examples use `$RepoRoot` and `$BotDir` so the same commands work on any Windows user account. Set `$RepoRoot` to wherever you cloned the repository.
+
 ## First-Time Setup
 
 1. Open PowerShell.
@@ -9,15 +11,19 @@ This guide gets SCLK Notifier running from a Windows PC. It is the MVP deploymen
 2. Clone the repo:
 
 ```
-cd C:\Users\andre\Documents
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd (Split-Path $RepoRoot)
 git clone https://github.com/award73/SCLK-Notifier.git
-cd SCLK-Notifier\discord-alumni-reminder-bot
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+cd $BotDir
 ```
 
    If the repo is already cloned:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+cd $BotDir
 ```
 
 3. Create and activate a virtual environment:
@@ -53,6 +59,7 @@ DISCORD_TOKEN=
 GUILD_ID=
 ANNOUNCEMENT_CHANNEL_ID=
 ALUMNI_ROLE_ID=
+ALUMNI_BOARD_ROLE_ID=
 TIMEZONE=America/New_York
 DISCORD_BOT_PERMISSIONS=8462797117848576
 REMINDERS_ENABLED=true
@@ -80,13 +87,15 @@ python bot.py
 In Discord:
 
 1. Create a future native Discord Scheduled Event.
-2. As a Manage Server admin, run `/event_sync`.
+2. As an Alumni Board member, run `/event_sync`.
 3. Run `/event_list`.
 4. Run `/next_meeting`.
-5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning only you.
-6. Run `/agenda_add item:"Test agenda item"`.
-7. Run `/agenda`.
-8. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
+5. Run `/test_notify` and confirm the announcement channel gets a production-shaped message mentioning the Alumni Board role.
+6. Run `/notify` only when ready to ping the Alumni role.
+7. Run `/agenda_add item:"Test agenda item"`.
+8. Run `/agenda`.
+9. Rapidly add several agenda items and confirm each appears in `/agenda`.
+10. Add a test item containing `@everyone`, `@here`, a role mention, a user mention, a channel mention, a link, and markdown. Confirm no ping occurs when viewing `/agenda`.
 
 ## Database Integrity And Backups
 
@@ -99,8 +108,9 @@ restarting the bot will not affect the database file.
 Before pulling new code, open PowerShell and take a snapshot of the database:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 ### Restore from backup
@@ -108,8 +118,9 @@ Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alu
 If something goes wrong after a code update, stop the bot and restore:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db.bak') (Join-Path $BotDir 'alumni_bot.db')
 ```
 
 Then restart the bot normally.
@@ -146,11 +157,12 @@ To automatically back up the database every day, use Windows Task Scheduler with
 simple PowerShell script.
 
 Create a file called `backup_db.ps1` anywhere convenient, for example
-`C:\Users\andre\Documents\backup_db.ps1`, with this content:
+`$env:USERPROFILE\Documents\backup_db.ps1`, with this content:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 Then in Task Scheduler:
@@ -161,7 +173,7 @@ Then in Task Scheduler:
 4. Set the trigger to **Daily** at a time the bot is unlikely to be writing, such as 2:00 AM.
 5. Set the action to **Start a program**.
 6. Program: `powershell.exe`
-7. Arguments: `-ExecutionPolicy Bypass -File "C:\Users\andre\Documents\backup_db.ps1"`
+7. Arguments: `-ExecutionPolicy Bypass -File "%USERPROFILE%\Documents\backup_db.ps1"`
 8. Click **Finish**.
 
 This overwrites the previous `.bak` file daily, giving you a rolling 24-hour safety net.
@@ -177,14 +189,16 @@ Use this when new code has been merged or you want to test a branch.
 2. Back up the database before making any changes:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db') (Join-Path $BotDir 'alumni_bot.db.bak')
 ```
 
 3. Update the repo:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git switch main
 git pull
 ```
@@ -216,7 +230,7 @@ python -m py_compile bot.py
 python -m unittest discover -s tests
 ```
 
-7. Confirm `.env` still has the correct Discord values, `DISCORD_BOT_PERMISSIONS=8462797117848576`, and `REMINDERS_ENABLED=true`.
+7. Confirm `.env` still has the correct Discord values, `ALUMNI_BOARD_ROLE_ID`, `DISCORD_BOT_PERMISSIONS=8462797117848576`, and `REMINDERS_ENABLED=true`.
 
 8. Verify database integrity:
 
@@ -257,14 +271,16 @@ Use this if the latest code fails and you need to test a known-good commit.
 2. Restore the database backup taken before the failed deploy:
 
 ```
-Copy-Item C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db.bak `
-          C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot\alumni_bot.db
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+$BotDir = Join-Path $RepoRoot 'discord-alumni-reminder-bot'
+Copy-Item (Join-Path $BotDir 'alumni_bot.db.bak') (Join-Path $BotDir 'alumni_bot.db')
 ```
 
 3. Verify the restored database is healthy:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier\discord-alumni-reminder-bot
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd (Join-Path $RepoRoot 'discord-alumni-reminder-bot')
 python -c "import sqlite3; conn = sqlite3.connect('alumni_bot.db'); print(conn.execute('PRAGMA integrity_check;').fetchone()[0]); conn.close()"
 ```
 
@@ -273,7 +289,8 @@ Confirm the output is `ok` before continuing.
 4. Show recent commits:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git log --oneline
 ```
 
@@ -296,7 +313,8 @@ python bot.py
 7. After testing, return to a branch:
 
 ```
-cd C:\Users\andre\Documents\SCLK-Notifier
+$RepoRoot = Join-Path $env:USERPROFILE 'Documents\SCLK-Notifier'
+cd $RepoRoot
 git switch main
 ```
 

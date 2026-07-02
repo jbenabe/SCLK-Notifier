@@ -13,6 +13,7 @@ os.environ.setdefault("DISCORD_TOKEN", "test-token")
 os.environ.setdefault("GUILD_ID", "123")
 os.environ.setdefault("ANNOUNCEMENT_CHANNEL_ID", "456")
 os.environ.setdefault("ALUMNI_ROLE_ID", "789")
+os.environ.setdefault("ALUMNI_BOARD_ROLE_ID", "987")
 os.environ.setdefault("TIMEZONE", "America/New_York")
 
 import bot  # noqa: E402
@@ -23,6 +24,21 @@ class FakeScheduledEvent:
         self.name = name
         self.start_time = start_time
         self.status = type("Status", (), {"name": status_name})()
+
+
+class FakeRole:
+    def __init__(self, role_id: int) -> None:
+        self.id = role_id
+
+
+class FakeUser:
+    def __init__(self, role_ids: list[int]) -> None:
+        self.roles = [FakeRole(role_id) for role_id in role_ids]
+
+
+class FakeInteraction:
+    def __init__(self, role_ids: list[int]) -> None:
+        self.user = FakeUser(role_ids)
 
 
 class SafetyTestCase(unittest.TestCase):
@@ -70,22 +86,13 @@ class SafetyTestCase(unittest.TestCase):
         self.assertIn("\\*\\*bold\\*\\*", sanitized)
         self.assertIn("\\`code\\`", sanitized)
 
-    def test_agenda_cooldown_and_quotas(self) -> None:
+    def test_agenda_rapidfire_has_no_per_user_cooldown_or_cap(self) -> None:
         bot.add_agenda_item(self.event_id, "First item", 42, "Member")
-
-        self.assertIn("wait", bot.agenda_write_rejection_reason(bot.get_tracked_event(self.event_id), 42).lower())
-
-        old_time = bot.datetime_to_db(bot.utc_now() - timedelta(hours=2))
-        with bot.get_db() as conn:
-            conn.execute("UPDATE agenda_items SET created_at_utc = ?", (old_time,))
         bot.add_agenda_item(self.event_id, "Second item", 42, "Member")
-        with bot.get_db() as conn:
-            conn.execute("UPDATE agenda_items SET created_at_utc = ?", (old_time,))
         bot.add_agenda_item(self.event_id, "Third item", 42, "Member")
-        with bot.get_db() as conn:
-            conn.execute("UPDATE agenda_items SET created_at_utc = ?", (old_time,))
 
-        self.assertIn("already have", bot.agenda_write_rejection_reason(bot.get_tracked_event(self.event_id), 42))
+        self.assertIsNone(bot.agenda_write_rejection_reason(bot.get_tracked_event(self.event_id), 42))
+        self.assertEqual(bot.count_user_agenda_items(self.event_id, 42), 3)
 
     def test_rejected_write_cooldown(self) -> None:
         for _ in range(bot.REJECTED_WRITE_LIMIT):
@@ -93,6 +100,32 @@ class SafetyTestCase(unittest.TestCase):
 
         self.assertTrue(bot.user_has_rejection_cooldown(99))
         self.assertIn("Too many", bot.agenda_write_rejection_reason(bot.get_tracked_event(self.event_id), 99))
+
+    def test_elevated_commands_require_alumni_board_role(self) -> None:
+        self.assertTrue(bot.user_can_use_elevated_commands(FakeInteraction([bot.config.alumni_board_role_id])))
+        self.assertFalse(bot.user_can_use_elevated_commands(FakeInteraction([bot.config.alumni_role_id])))
+
+    def test_notification_composer_differs_only_by_role_mention(self) -> None:
+        event = bot.get_tracked_event(self.event_id)
+
+        board_lines = bot.compose_reminder_lines(event, bot.config, "seven_day", f"<@&{bot.config.alumni_board_role_id}>")
+        alumni_lines = bot.compose_reminder_lines(event, bot.config, "seven_day", f"<@&{bot.config.alumni_role_id}>")
+
+        self.assertEqual(
+            board_lines[0].replace(str(bot.config.alumni_board_role_id), str(bot.config.alumni_role_id)),
+            alumni_lines[0],
+        )
+        self.assertEqual(board_lines[1:], alumni_lines[1:])
+
+    def test_notification_composer_includes_agenda_help_and_guide_link(self) -> None:
+        event = bot.get_tracked_event(self.event_id)
+
+        lines = bot.compose_reminder_lines(event, bot.config, "seven_day", f"<@&{bot.config.alumni_role_id}>")
+
+        self.assertIn("Add an agenda item with:", lines)
+        self.assertIn('/agenda_add item:"Your topic here"', lines)
+        self.assertIn("Learn more about the bot:", lines)
+        self.assertIn(bot.BOT_GUIDE_URL, lines)
 
     def test_public_message_truncation_preserves_footer(self) -> None:
         lines = ["Meeting time: <t:123:F>", "Discord event:", "https://discord.com/events/1/2", "x" * 3000]

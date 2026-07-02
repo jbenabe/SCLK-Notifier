@@ -54,7 +54,7 @@ Alternatives considered:
 
 ## Open Questions
 
-- Should event matching require exact phrase containment, or should admins be able to configure multiple aliases?
+- Should admins be able to narrow events by name later, or should the MVP continue tracking all visible events?
 - If the bot first discovers an event inside the 1-hour window, should it send both the missed 7-day reminder and the 1-hour reminder, or only the most relevant reminder?
 - Should agenda submissions close at meeting start only, or a configurable period before start?
 - Should reminder messages include the full agenda every time, or only counts plus `/agenda` guidance for long agendas?

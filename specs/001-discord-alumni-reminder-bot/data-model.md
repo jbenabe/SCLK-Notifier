@@ -47,7 +47,7 @@ Member-submitted agenda entries associated with one tracked Discord event.
 - Active agenda items for a meeting are listed by `created_at_utc ASC`.
 - Agenda additions are allowed only before the linked meeting starts.
 - Agenda text may be stored as submitted for audit, but every display path must render a sanitized version that cannot create Discord mentions or deceptive formatting.
-- Agenda writes are subject to per-user cooldowns, per-user/per-event quotas, and total per-event quotas.
+- Agenda writes are subject to item validation, rejected-write cooldowns, and total per-event quotas.
 
 ## abuse_events
 
@@ -76,7 +76,7 @@ Structured in-memory result returned by event sync.
 | `fetched_count` | integer | Number of Discord events returned by API. |
 | `matched_count` | integer | Number of events accepted by eligibility rules. |
 | `matched_events` | list | Event ID, name, status, and start time summaries. |
-| `non_matching_events` | list | Limited diagnostic list of scheduled events rejected by status/time. |
+| `ineligible_events` | list | Limited diagnostic list of scheduled events rejected by status/time. |
 | `error` | optional string | Permission, fetch, or unexpected Discord API failure. |
 
 This model does not need to be persisted; it exists to improve admin feedback and logs.
@@ -87,8 +87,6 @@ Structured in-memory policy used by agenda and reminder flows.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `agenda_add_cooldown_seconds` | integer | Minimum delay between accepted agenda writes by one user. |
-| `agenda_user_event_quota` | integer | Maximum active agenda items one user may add to one event. |
 | `agenda_event_quota` | integer | Maximum active agenda items allowed for one event. |
 | `rejected_write_cooldown_seconds` | integer | Temporary cooldown after repeated rejected writes. |
 | `public_message_max_chars` | integer | Maximum rendered public reminder length before truncation. |
